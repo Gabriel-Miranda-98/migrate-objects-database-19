@@ -1,0 +1,13 @@
+{
+  "name": "migrate-objects-database-19",
+  "version": "1.0.0",
+  "description": "projeto para migrar os dados da base de homologação para nova homologação 19",
+  "main": "index.js",
+  "author": "Gabriel Miranda",
+  "type": "module",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "oracledb": "^6.0.3"
+  }
+}
