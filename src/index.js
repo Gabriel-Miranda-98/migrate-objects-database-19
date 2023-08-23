@@ -165,6 +165,31 @@ SQL_OBJECT = result.rows[i].DLL.replace(regexPattern, "");
 
 
 }
+ result = await connection.execute(`SELECT  SEQUENCE_NAME, DBMS_METADATA.GET_DDL('SEQUENCE', SEQUENCE_NAME,SEQUENCE_OWNER) AS DLL FROM dba_sequences  WHERE SEQUENCE_OWNER IN ('ARTERH','PONTO_ELETRONICO')AND   SEQUENCE_NAME NOT LIKE '%ISEQ%'`)
+
+
+for(let i=0; i<result.rows.length; i++){
+  const filePath = path.join(__dirname, 'sequences', `${result.rows[i].SEQUENCE_NAME}.sql`);
+
+
+
+SQL_OBJECT = result.rows[i].DLL
+ try {
+  await connection19.execute(SQL_OBJECT,[])
+  console.log('Saved!');
+
+} catch (error) {
+  console.log(error)
+  console.log(SQL_OBJECT)
+  fs.appendFile(filePath, SQL_OBJECT, function (err) {
+    if (err) throw err;
+    console.log('Saved!');
+  })
+}
+
+
+
+}
 
 
 await connection.close();
