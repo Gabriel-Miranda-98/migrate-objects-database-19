@@ -1,0 +1,714 @@
+
+  CREATE OR REPLACE EDITIONABLE PROCEDURE "PONTO_ELETRONICO"."SMARH_INT_ATT_ENDERECOS" 
+AS
+BEGIN
+  BEGIN
+    UPDATE ARTERH_SIOM
+    SET CODIGO_ARTE='00'
+      ||CEP
+      ||LPAD(NUMERO,5,0)
+    WHERE CODIGO_ARTE IS NULL;
+    COMMIT;
+    UPDATE ARTERH_SIOM
+    SET CODIGO_REGIONAL=
+      CASE
+        WHEN REGIONAL='BARREIRO'
+        THEN '000000000000001'
+        WHEN REGIONAL='NOROESTE'
+        THEN '000000000000005'
+        WHEN REGIONAL='NORDESTE'
+        THEN '000000000000004'
+        WHEN REGIONAL='CENTRO-SUL'
+        THEN '000000000000002'
+        WHEN REGIONAL='VENDA NOVA'
+        THEN '000000000000009'
+        WHEN REGIONAL='LESTE'
+        THEN '000000000000003'
+        WHEN REGIONAL='OESTE'
+        THEN '000000000000007'
+        WHEN REGIONAL='NORTE'
+        THEN '000000000000006'
+        WHEN REGIONAL='PAMPULHA'
+        THEN '000000000000008'
+      END
+    WHERE REGIONAL      IS NOT NULL
+    AND CODIGO_REGIONAL IS NULL;
+    COMMIT;
+    UPDATE ARTERH_SIOM
+    SET TIPO_LOGRADOURO=
+      CASE
+        WHEN TIPO_LOGRADOURO='RUA'
+        THEN'0001'
+        WHEN TIPO_LOGRADOURO='AVENIDA'
+        THEN'0002'
+        WHEN TIPO_LOGRADOURO='PRACA'
+        THEN'0003'
+        WHEN TIPO_LOGRADOURO='ALAMEDA'
+        THEN'0004'
+        WHEN TIPO_LOGRADOURO='ESTRADA'
+        THEN'0005'
+        WHEN TIPO_LOGRADOURO='BECO'
+        THEN'0008'
+        WHEN TIPO_LOGRADOURO='TRAVESSA'
+        THEN'0009'
+        WHEN TIPO_LOGRADOURO='RODOVIA'
+        THEN'0011'
+        WHEN TIPO_LOGRADOURO='QUADRA'
+        THEN'0012'
+        WHEN TIPO_LOGRADOURO='CONDOMINIO'
+        THEN'0013'
+        WHEN TIPO_LOGRADOURO='SITIO'
+        THEN'0014'
+        WHEN TIPO_LOGRADOURO='FAZENDA'
+        THEN'0015'
+        WHEN TIPO_LOGRADOURO='VILA'
+        THEN'0016'
+        WHEN TIPO_LOGRADOURO='LARGO'
+        THEN'0017'
+        WHEN TIPO_LOGRADOURO='ESCADARIA'
+        THEN'0018'
+        WHEN TIPO_LOGRADOURO='LADEIRA'
+        THEN'0019'
+        WHEN TIPO_LOGRADOURO='PARQUE'
+        THEN'0020'
+        ELSE NULL
+      END
+    WHERE DT_ENVIADO_ARTE IS NULL;
+    COMMIT;
+    UPDATE ARTERH_SIOM SET DT_ENVIADO_ARTE=SYSDATE WHERE DT_ENVIADO_ARTE IS NULL;
+    COMMIT;
+    UPDATE ARTERH_SIOM S
+    SET INTEGRADO      ='S'
+    WHERE S.CODIGO_ARTE=
+      (SELECT XX.CODIGO_ARTE
+      FROM
+        (SELECT SM.CODIGO_ARTE
+        FROM ARTERH_SIOM SM
+        WHERE EXISTS
+          (SELECT CODIGO FROM RHORGA_ENDERECO EN WHERE EN.CODIGO=SM.CODIGO_ARTE
+          )
+        GROUP BY SM.CODIGO_ARTE
+        )XX
+      WHERE S.CODIGO_ARTE=XX.CODIGO_ARTE
+      );
+    COMMIT;
+    ------COMENTADO ATE A AUTOMATIZACAO
+    /*
+    DELETE FROM ARTERH_SIOM SM WHERE SM.CODIGO_OPUS= (SELECT XX.CODIGO_OPUS FROM (SELECT COUNT(1)QUANT,X.CODIGO_OPUS,X.DATA_CARGA FROM (SELECT CODIGO_OPUS,trunc(DATA_CARGA)as data_carga FROM ARTERH_SIOM )X
+    WHERE TRUNC(X.DATA_CARGA)=TRUNC(TO_DATE(vDATA_INICIO,'DD/MM/YYYY'))
+    group by X.CODIGO_OPUS, X.DATA_CARGA)XX
+    WHERE XX.QUANT=2
+    AND SM.CODIGO_OPUS=XX.CODIGO_OPUS
+    AND TRUNC(SM.DATA_CARGA)=TRUNC(XX.DATA_CARGA))
+    AND SM.DATA_DESATIVACAO IS NOT NULL;*/
+  END;
+  DECLARE
+    CONT NUMBER;
+  BEGIN
+    FOR C1 IN
+    (SELECT XX.*
+    FROM
+      (SELECT SUBSTR(XXXX.CODIGO_OPUS,0,13) AS CODIGO_UNIDADE,
+        XXXX.ID_ENDERECO_CORPORATIVO,
+        XXXX.CODIGO_ARTE,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,1,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,1,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE1,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,3,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,3,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE2,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,5,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,5,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE3,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,7,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,7,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE4,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,9,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,9,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE5,
+        CASE
+          WHEN LENGTH(SUBSTR(XXXX.CODIGO_OPUS,12,2))=2
+          THEN LPAD (SUBSTR(XXXX.CODIGO_OPUS,12,2),6,'0')
+          ELSE NULL
+        END AS COD_UNIDADE6,
+        CASE
+          WHEN XXXX.FAZER        ='MANTER'
+          AND NOVO_ENDERECO      ='END_JA_INCLUIDO'
+          AND ALTEROU_CODIGO_OPUS='ALTEROU_CODIGO_OPUS'
+          THEN XXXX.CODIGO_OPUS_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN XXXX.CODIGO_OPUS
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN XXXX.CODIGO_OPUS_SEGUINTE
+          ELSE NULL
+        END AS CODIGO_OPUS,
+        CASE
+          WHEN XXXX.FAZER         ='MANTER'
+          AND NOVO_ENDERECO       ='END_JA_INCLUIDO'
+          AND ALTEROU_NOME_UNIDADE='NOME_UNIDADE_MUDOU'
+          THEN UPPER(TRANSLATE(TRIM(XXXX.DESCRICAO_UNIDADE_SEGUINTE),'âàãáÁÂÀÃéêÉÊíÍóôõÓÔÕüúÜÚÇç~','AAAAAAAAEEEEIIOOOOOOUUUUCC'))
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN UPPER(TRANSLATE(TRIM(XXXX.DESCRICAO_UNIDADE),'âàãáÁÂÀÃéêÉÊíÍóôõÓÔÕüúÜÚÇç~','AAAAAAAAEEEEIIOOOOOOUUUUCC'))
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN UPPER(TRANSLATE(TRIM(XXXX.DESCRICAO_UNIDADE_SEGUINTE),'âàãáÁÂÀÃéêÉÊíÍóôõÓÔÕüúÜÚÇç~','AAAAAAAAEEEEIIOOOOOOUUUUCC'))
+          ELSE NULL
+        END AS DESCRICAO_UNIDADE,
+        CASE
+          WHEN XXXX.FAZER     ='MANTER'
+          AND NOVO_ENDERECO   ='END_JA_INCLUIDO'
+          AND ALTEROU_LATITUDE='LATITUDE_MUDOU'
+          THEN XXXX.LATITUDE_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN XXXX.LATITUDE
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN XXXX.LATITUDE_SEGUINTE
+          ELSE NULL
+        END AS LATITUDE,
+        CASE
+          WHEN XXXX.FAZER      ='MANTER'
+          AND NOVO_ENDERECO    ='END_JA_INCLUIDO'
+          AND ALTEROU_LONGITUDE='ALTEROU_LONGITUDE'
+          THEN XXXX.LONGITUDE_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN XXXX.LONGITUDE
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN XXXX.LONGITUDE_SEGUINTE
+          ELSE NULL
+        END AS LONGITUDE,
+        CASE
+          WHEN XXXX.FAZER       ='MANTER'
+          AND NOVO_ENDERECO     ='END_JA_INCLUIDO'
+          AND ALTEROU_LOGRADOURO='LOGRADOURO_MUDOU'
+          THEN XXXX.LOGRADOURO_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN XXXX.LOGRADOURO
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN XXXX.LOGRADOURO_SEGUINTE
+          ELSE NULL
+        END AS LOGRADOURO,
+        CASE
+          WHEN XXXX.FAZER            ='MANTER'
+          AND NOVO_ENDERECO          ='END_JA_INCLUIDO'
+          AND ALTEROU_TIPO_LOGRADOURO='TIPO_LOGRADOURO_MUDOU'
+          THEN XXXX.TIPO_LOGRADOURO_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN XXXX.TIPO_LOGRADOURO
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN XXXX.TIPO_LOGRADOURO_SEGUINTE
+          ELSE NULL
+        END AS TIPO_LOGRADOURO,
+        CASE
+          WHEN XXXX.FAZER   ='MANTER'
+          AND NOVO_ENDERECO ='END_JA_INCLUIDO'
+          AND ALTEROU_NUMERO='NUMERO_MUDOU'
+          THEN NUMERO_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN NUMERO
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN NUMERO_SEGUINTE
+          ELSE NULL
+        END AS NUMERO,
+        CASE
+          WHEN XXXX.FAZER   ='MANTER'
+          AND NOVO_ENDERECO ='END_JA_INCLUIDO'
+          AND ALTEROU_BAIRRO='BAIRRO_MUDOU'
+          THEN BAIRRO_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN BAIRRO
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN BAIRRO_SEGUINTE
+          ELSE NULL
+        END AS BAIRRO,
+        CASE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='END_JA_INCLUIDO'
+          AND ALTEROU_CEP  ='CEP_MUDOU'
+          THEN CEP_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN CEP
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN CEP_SEGUINTE
+          ELSE NULL
+        END AS CEP,
+        CASE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='END_JA_INCLUIDO'
+          AND ALTEROU_REDE ='REDE_MUDOU'
+          THEN REDE_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN REDE
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN REDE_SEGUINTE
+          ELSE NULL
+        END AS REDE,
+        CASE
+          WHEN XXXX.FAZER     ='MANTER'
+          AND NOVO_ENDERECO   ='END_JA_INCLUIDO'
+          AND ALTEROU_REGIONAL='REGIONAL_MUDOU'
+          THEN REGIONAL_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN REGIONAL
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN REGIONAL_SEGUINTE
+          ELSE NULL
+        END AS REGIONAL,
+        CASE
+          WHEN XXXX.FAZER            ='MANTER'
+          AND NOVO_ENDERECO          ='END_JA_INCLUIDO'
+          AND ALTEROU_CODIGO_REGIONAL='CODIGO_REGIONAL_MUDOU'
+          THEN CODIGO_REGIONAL_SEGUINTE
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN CODIGO_REGIONAL
+          WHEN XXXX.FAZER='REATIVAR'
+          THEN CODIGO_REGIONAL_SEGUINTE
+          ELSE NULL
+        END AS CODIGO_REGIONAL,
+        CASE
+          WHEN XXXX.FAZER='DESETAIVAR'
+          THEN XXXX.DATA_DESATIVACAO_SEGUINTE
+          ELSE NULL
+        END AS DATA_DESATIVACAO,
+        CASE
+          WHEN XXXX.FAZER            ='MANTER'
+          AND NOVO_ENDERECO          ='END_JA_INCLUIDO'
+          AND ( (ALTEROU_CODIGO_OPUS ='ALTEROU_CODIGO_OPUS')
+          OR (ALTEROU_NOME_UNIDADE   ='NOME_UNIDADE_MUDOU')
+          OR(ALTEROU_LATITUDE        ='LATITUDE_MUDOU')
+          OR (ALTEROU_LONGITUDE      ='ALTEROU_LONGITUDE')
+          OR (ALTEROU_LOGRADOURO     ='LOGRADOURO_MUDOU')
+          OR (ALTEROU_TIPO_LOGRADOURO='TIPO_LOGRADOURO_MUDOU')
+          OR(ALTEROU_NUMERO          ='NUMERO_MUDOU')
+          OR (ALTEROU_BAIRRO         ='BAIRRO_MUDOU')
+          OR (ALTEROU_CEP            ='CEP_MUDOU')
+          OR(ALTEROU_REDE            ='REDE_MUDOU')
+          OR (ALTEROU_REGIONAL       ='REGIONAL_MUDOU')
+          OR (ALTEROU_CODIGO_REGIONAL='CODIGO_REGIONAL_MUDOU') )
+          THEN 'A'
+          WHEN XXXX.FAZER  ='MANTER'
+          AND NOVO_ENDERECO='NOVO_END'
+          THEN 'I'
+          WHEN XXXX.FAZER='DESETAIVAR'
+          THEN 'E'
+          ELSE 'AVA'
+        END AS TIPO_FAZER
+      FROM
+        (SELECT XXX.*
+        FROM
+          (SELECT
+            CASE
+              WHEN XX.DATA_DESATIVACAO         IS NULL
+              AND XX.DATA_DESATIVACAO_SEGUINTE IS NOT NULL
+              THEN 'DESATIVAR'
+              WHEN XX.DATA_DESATIVACAO         IS NOT NULL
+              AND XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              THEN 'REATIVAR'
+              ELSE'MANTER'
+            END AS FAZER ,
+            CASE
+              WHEN XX.DIA              ='ULTIMO'
+              AND INTEGRADO            ='N'
+              AND XX.DATA_DESATIVACAO IS NULL
+              THEN 'NOVO_END'
+              ELSE'END_JA_INCLUIDO'
+            END AS NOVO_ENDERECO,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.CODIGO_OPUS                <>XX.CODIGO_OPUS_SEGUINTE
+              THEN 'ALTEROU_CODIGO_OPUS'
+              ELSE 'CODIGO_OPUS_IGUAL'
+            END AS ALTEROU_CODIGO_OPUS,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.DESCRICAO_UNIDADE          <>XX.DESCRICAO_UNIDADE_SEGUINTE
+              THEN 'NOME_UNIDADE_MUDOU'
+              ELSE 'NOME_UNIDADE_IGUAL'
+            END AS ALTEROU_NOME_UNIDADE,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.LATITUDE                   <>XX.LATITUDE_SEGUINTE
+              THEN 'LATITUDE_MUDOU'
+              ELSE 'LATITUDE_IGUAL'
+            END AS ALTEROU_LATITUDE,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.LONGITUDE                  <>XX.LONGITUDE_SEGUINTE
+              THEN'LONGITUDE_MUDOU'
+              ELSE'LONGITUDE_IGUAL'
+            END AS ALTEROU_LONGITUDE,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.LOGRADOURO                 <>XX.LOGRADOURO_SEGUINTE
+              THEN 'LOGRADOURO_MUDOU'
+              ELSE 'LOGRADOURO_IGUAL'
+            END AS ALTEROU_LOGRADOURO,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.TIPO_LOGRADOURO            <>XX.TIPO_LOGRADOURO_SEGUINTE
+              THEN 'TIPO_LOGRADOURO_MUDOU'
+              ELSE 'TIPO_LOGRADOURO_IGUAL'
+            END AS ALTEROU_TIPO_LOGRADOURO,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.NUMERO                     <>XX.NUMERO_SEGUINTE
+              THEN 'NUMERO_MUDOU'
+              ELSE 'NUMERO_IGUAL'
+            END AS ALTEROU_NUMERO,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.BAIRRO                     <>XX.BAIRRO_SEGUINTE
+              THEN 'BAIRRO_MUDOU'
+              ELSE 'BAIRRO_IGUAL'
+            END AS ALTEROU_BAIRRO,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.CEP                        <>XX.CEP_SEGUINTE
+              THEN 'CEP_MUDOU'
+              ELSE 'CEP_IGUAL'
+            END AS ALTEROU_CEP,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.REDE                       <>XX.REDE_SEGUINTE
+              THEN'REDE_MUDOU'
+              ELSE'REDE_IGUAL'
+            END AS ALTEROU_REDE,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.REGIONAL                   <>XX.REGIONAL_SEGUINTE
+              THEN 'REGIONAL_MUDOU'
+              ELSE'REGIONAL_IGUAL'
+            END AS ALTEROU_REGIONAL,
+            CASE
+              WHEN XX.DATA_DESATIVACAO_SEGUINTE IS NULL
+              AND XX.CODIGO_REGIONAL            <>XX.CODIGO_REGIONAL_SEGUINTE
+              THEN 'CODIGO_REGIONAL_MUDOU'
+              ELSE'CODIGO_REGIONAL_IGUAL'
+            END AS ALTEROU_CODIGO_REGIONAL,
+            XX.*
+          FROM
+            (SELECT X.CODIGO_EMPRESA,
+              X.ID_ENDERECO_CORPORATIVO,
+              X.CODIGO_ARTE,
+              Row_Number () Over (Partition BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER By X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA)ORDEM,
+              X.DIA,
+              LEAD(X.DIA, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA)DIA_SEGUINTE,
+              X.CODIGO_OPUS,
+              LEAD(X.CODIGO_OPUS, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA)CODIGO_OPUS_SEGUINTE,
+              X.DESCRICAO_UNIDADE,
+              LEAD(X.DESCRICAO_UNIDADE, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) DESCRICAO_UNIDADE_SEGUINTE,
+              X.LATITUDE,
+              LEAD(X.LATITUDE, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) LATITUDE_SEGUINTE,
+              X.LONGITUDE,
+              LEAD(X.LONGITUDE, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA, X.CODIGO_OPUS,X.DIA) LONGITUDE_SEGUINTE,
+              X.LOGRADOURO,
+              LEAD(X.LOGRADOURO, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) LOGRADOURO_SEGUINTE,
+              X.TIPO_LOGRADOURO,
+              LEAD(X.TIPO_LOGRADOURO, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) TIPO_LOGRADOURO_SEGUINTE,
+              X.NUMERO,
+              LEAD(X.NUMERO, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) NUMERO_SEGUINTE,
+              X.BAIRRO,
+              LEAD(X.BAIRRO, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA)BAIRRO_SEGUINTE,
+              X.CEP,
+              LEAD(X.CEP, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS, X.DIA) CEP_SEGUINTE,
+              X.DATA_DESATIVACAO,
+              LEAD(X.DATA_DESATIVACAO, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA) DATA_DESATIVACAO_SEGUINTE,
+              X.REDE,
+              LEAD(X.REDE, 1, NULL) OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA) REDE_SEGUINTE,
+              X.INTEGRADO,
+              LEAD(X.INTEGRADO,1,NULL)OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA) INTEGRADO_SEGUINTE,
+              X.REGIONAL,
+              LEAD(X.REGIONAL,1,NULL)OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA) REGIONAL_SEGUINTE,
+              X.CODIGO_REGIONAL,
+              LEAD(X.CODIGO_REGIONAL,1,NULL)OVER(PARTITION BY X.CODIGO_EMPRESA,X.CODIGO_OPUS ORDER BY X.CODIGO_EMPRESA,X.CODIGO_OPUS,X.DIA)CODIGO_REGIONAL_SEGUINTE
+            FROM
+              (SELECT 'ULTIMO' AS DIA,
+                SM.CODIGO_ARTE,
+                SM.CODIGO_EMPRESA,
+                SM.ID_ENDERECO_CORPORATIVO,
+                SM.DESCRICAO_UNIDADE,
+                SM.CODIGO_OPUS,
+                SM.LATITUDE,
+                SM.LONGITUDE,
+                SM.DATA_DESATIVACAO,
+                SM.LOGRADOURO,
+                SM.TIPO_LOGRADOURO,
+                SM.NUMERO,
+                SM.LETRA_IMOVEL,
+                SM.BAIRRO,
+                SM.CODIGO_MUNICIPIO,
+                SM.DESCRICAO_MUNICIPIO,
+                SM.CEP,
+                SM.UF,
+                SM.INTEGRADO,
+                SM.REGIONAL,
+                SM.CODIGO_REGIONAL,
+                XX.REDE
+              FROM PONTO_ELETRONICO.Arterh_SIOM SM
+              LEFT OUTER JOIN
+                (SELECT LISTAGG(REPLACE(X.REDE,' ',''),',') WITHIN GROUP(ORDER BY ID_GEO) as REDE,
+                X.ID_GEO
+                FROM
+                  (SELECT DISTINCT (REDE) AS REDE,
+                  ID_GEO
+                  FROM PONTO_ELETRONICO.ARTERH_SDM SD
+                  WHERE TRUNC(SD.DATA_CARGA)=
+                    (SELECT MAX(TRUNC(AUX.DATA_CARGA))
+                    FROM PONTO_ELETRONICO.ARTERH_SDM AUX
+                    WHERE AUX.ID_GEO=SD.ID_GEO
+                    )
+                  )X
+                  GROUP BY X.ID_GEO
+                )XX
+              ON SM.ID_ENDERECO_CORPORATIVO=XX.ID_GEO
+              WHERE TRUNC(SM.DATA_CARGA)   =
+                (SELECT MAX (TRUNC(AUX.DATA_CARGA))
+                FROM PONTO_ELETRONICO.ARTERH_SIOM AUX
+                WHERE AUX.CODIGO_OPUS=SM.CODIGO_OPUS
+                )
+              GROUP BY SM.CODIGO_ARTE,
+                SM.ID_ENDERECO_CORPORATIVO,
+                SM.DESCRICAO_UNIDADE,
+                SM.CODIGO_OPUS,
+                SM.LATITUDE,
+                SM.LONGITUDE,
+                SM.DATA_DESATIVACAO,
+                SM.LOGRADOURO,
+                SM.TIPO_LOGRADOURO,
+                SM.NUMERO,
+                SM.LETRA_IMOVEL,
+                SM.BAIRRO,
+                SM.CODIGO_MUNICIPIO,
+                SM.DESCRICAO_MUNICIPIO,
+                SM.CEP,
+                SM.UF,
+                SM.INTEGRADO,
+                SM.CODIGO_EMPRESA,
+                SM.REGIONAL,
+                SM.CODIGO_REGIONAL,
+                XX.REDE
+              UNION ALL
+              SELECT 'PENULTIMO' AS DIA,
+                P.CODIGO_ARTE,
+                P.CODIGO_EMPRESA,
+                P.ID_ENDERECO_CORPORATIVO,
+                P.DESCRICAO_UNIDADE,
+                P.CODIGO_OPUS,
+                P.LATITUDE,
+                P.LONGITUDE,
+                P.DATA_DESATIVACAO,
+                P.LOGRADOURO,
+                P.TIPO_LOGRADOURO,
+                P.NUMERO,
+                P.LETRA_IMOVEL,
+                P.BAIRRO,
+                P.CODIGO_MUNICIPIO,
+                P.DESCRICAO_MUNICIPIO,
+                P.CEP,
+                P.UF,
+                P.INTEGRADO,
+                P.REGIONAL,
+                P.CODIGO_REGIONAL,
+                XX.REDE
+              FROM PONTO_ELETRONICO.Arterh_SIOM P
+              LEFT OUTER JOIN
+                (SELECT LISTAGG(REPLACE(X.REDE,' ',''),',') WITHIN GROUP(ORDER BY ID_GEO) as REDE,
+                X.ID_GEO
+                FROM
+                  (SELECT DISTINCT (REDE) AS REDE,
+                  ID_GEO
+                  FROM PONTO_ELETRONICO.ARTERH_SDM S
+                  WHERE TRUNC(S.DATA_CARGA)=
+                    (SELECT X.DATA_CARGA
+                    FROM
+                      (SELECT K.DATA_CARGA,
+                        ROWNUM ORDEM_DATA
+                      FROM
+                        (SELECT Z.*
+                        FROM
+                          (SELECT TRUNC(X.DATA_CARGA) AS DATA_CARGA FROM PONTO_ELETRONICO.ARTERH_SDM x
+                          )Z
+                        GROUP BY Z.DATA_CARGA
+                        ORDER BY Z.DATA_CARGA DESC
+                        )K
+                      )X
+                    WHERE X.ORDEM_DATA=2
+                    )
+                  )X
+                  group by  X.ID_GEO
+                )XX
+              ON P.ID_ENDERECO_CORPORATIVO=XX.ID_GEO
+              WHERE TRUNC(P.DATA_CARGA)   =
+                (SELECT X.DATA_CARGA
+                FROM
+                  (SELECT K.DATA_CARGA,
+                    ROWNUM ORDEM_DATA
+                  FROM
+                    (SELECT Z.*
+                    FROM
+                      (SELECT TRUNC(X.DATA_CARGA) AS DATA_CARGA FROM PONTO_ELETRONICO.ARTERH_SIOM x
+                      )Z
+                    GROUP BY Z.DATA_CARGA
+                    ORDER BY Z.DATA_CARGA DESC
+                    )K
+                  )X
+                WHERE X.ORDEM_DATA=2
+                )
+              GROUP BY P.CODIGO_ARTE,
+                P.ID_ENDERECO_CORPORATIVO,
+                P.DESCRICAO_UNIDADE,
+                P.CODIGO_OPUS,
+                P.LATITUDE,
+                P.LONGITUDE,
+                P.DATA_DESATIVACAO,
+                P.LOGRADOURO,
+                P.TIPO_LOGRADOURO,
+                P.NUMERO,
+                P.LETRA_IMOVEL,
+                P.BAIRRO,
+                P.CODIGO_MUNICIPIO,
+                P.DESCRICAO_MUNICIPIO,
+                P.CEP,
+                P.UF,
+                P.INTEGRADO,
+                P.CODIGO_EMPRESA,
+                P.REGIONAL,
+                P.CODIGO_REGIONAL,
+                XX.REDE
+              )X
+            ORDER BY X.CODIGO_OPUS,
+              X.DIA
+            )XX
+          WHERE (XX.ORDEM=1)
+          )XXX
+        WHERE ( (XXX.NOVO_ENDERECO     ='NOVO_END'
+        AND XXX.INTEGRADO              ='N')
+        OR (XXX.FAZER                  ='DESATIVAR'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_CODIGO_OPUS    ='ALTEROU_CODIGO_OPUS'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_NOME_UNIDADE   ='ALTEROU_NOME_UNIDADE'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_LATITUDE       ='LATITUDE_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_LONGITUDE      ='LONGITUDE_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_LOGRADOURO     ='LOGRADOURO_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_TIPO_LOGRADOURO='TIPO_LOGRADOURO_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_NUMERO         ='NUMERO_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_BAIRRO         ='BAIRRO_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_CEP            ='CEP_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_REDE           ='REDE_MUDOU'
+        AND XXX.INTEGRADO_SEGUINTE     ='S')
+        OR (XXX.ALTEROU_REGIONAL       ='REGIONAL_MUDOU'
+        AND XXX.INTEGRADO              ='S')
+        OR (XXX.ALTEROU_CODIGO_REGIONAL='CODIGO_REGIONAL_MUDOU'
+        AND XXX.INTEGRADO              ='S') )
+        )XXXX
+      )XX
+    WHERE XX.TIPO_FAZER NOT IN ('AVA')
+    )--- FIM DO FOR
+    LOOP
+      CONT:=CONT+1;
+      INSERT
+      INTO ATUALIZA_ARTERH_SIOM_SDM
+        (
+          ID,
+          CODIGO_EMPRESA,
+          ID_SIOM_SDM,
+          CODIGO_UNIDADE,
+          CODIGO_ARTE,
+          COD_UNIDADE1,
+          COD_UNIDADE2,
+          COD_UNIDADE3,
+          COD_UNIDADE4,
+          COD_UNIDADE5,
+          COD_UNIDADE6,
+          DESCRICAO_UNIDADE,
+          LATITUDE,
+          LONGITUDE,
+          LOGRADOURO,
+          TIPO_LOGRADOURO,
+          NUMERO,
+          BAIRRO,
+          CODIGO_MUNICIPIO,
+          DESCRICAO_MUNICIPIO,
+          CEP,
+          UF,
+          CODIGO_OPUS,
+          DATA_SAIU_SIOM_SDM,
+          DATA_EXTINCAO,
+          REDE,
+          TIPO_FAZER,
+          REGIONAL,
+          CODIGO_REGIONAL
+        )
+        VALUES
+        (
+          (SELECT
+              CASE
+                WHEN MAX(NVL(ID,1)) IS NULL
+                THEN '1'
+                ELSE TO_CHAR(MAX(NVL(ID,1))+1)
+              END AS ID
+            FROM ATUALIZA_ARTERH_SIOM_SDM
+          )
+          ,
+          '0001',
+          C1.ID_ENDERECO_CORPORATIVO,
+          C1.CODIGO_UNIDADE,
+          C1.CODIGO_ARTE,
+          C1.COD_UNIDADE1,
+          C1.COD_UNIDADE2,
+          C1.COD_UNIDADE3,
+          C1.COD_UNIDADE4,
+          C1.COD_UNIDADE5,
+          C1.COD_UNIDADE6,
+          C1.DESCRICAO_UNIDADE,
+          C1.LATITUDE,
+          C1.LONGITUDE,
+          C1.LOGRADOURO,
+          C1.TIPO_LOGRADOURO,
+          C1.NUMERO,
+          C1.BAIRRO,
+          '000000000000010',
+          'BELO_HORIZONTE',
+          C1.CEP,
+          'MG',
+          C1.CODIGO_OPUS,
+          SYSDATE,
+          C1.DATA_DESATIVACAO,
+          C1.REDE,
+          C1.TIPO_FAZER,
+          C1.REGIONAL,
+          C1.CODIGO_REGIONAL
+        );
+      COMMIT;
+    END LOOP;
+  END;
+END;

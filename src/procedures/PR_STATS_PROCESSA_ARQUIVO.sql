@@ -1,0 +1,161 @@
+
+  CREATE OR REPLACE EDITIONABLE PROCEDURE "ARTERH"."PR_STATS_PROCESSA_ARQUIVO" (PID_ARQUIVO IN NUMBER) AS
+  
+  vID_ARQUIVO NUMBER;
+  vSITUACAO_ARQUIVO CHAR(2);
+  vSITUACAO_LEIAUTE CHAR(1);
+  vSITUACAO_REGRAS CHAR(1);
+  vSITUACAO_EFETIVA_REGISTROS CHAR(1);
+  vQTDE_LOGS_LEIAUTE NUMBER;  
+  vQTDE_LOGS_REGRAS NUMBER;  
+  vQTDE_LOGS_EFETIVA_REGISTROS NUMBER;  
+  vQTDE_REGISTROS_EFETIVADOS NUMBER;
+  vLOGIN_USUARIO VARCHAR2(40) := 'IMPORT_STATS';
+  vLINHA_ATUALIZADA NUMBER;
+  GERA_STATS_EXCEPTION EXCEPTION;
+
+PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    BEGIN
+    BEGIN
+         vID_ARQUIVO := null;
+         select ID_ARQUIVO, SITUACAO into vID_ARQUIVO, vSITUACAO_ARQUIVO from RHPBH_ARQUIVO where ID_ARQUIVO = PID_ARQUIVO;
+
+         IF vID_ARQUIVO IS NULL THEN
+            raise_application_error (-20001,'ID ARQUIVO INVALIDO.');
+         END IF;
+                  
+    EXCEPTION
+    WHEN OTHERS THEN
+       raise_application_error (-20002,'NAO FOI POSSIVEL RECUPERAR O ARQUIVO COM O ID_ARQUIVO INFORMADO.' || 'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+    END;
+    
+    
+    BEGIN    
+    
+select CASE WHEN SITUACAO = '00' THEN 'N'
+            WHEN SITUACAO = '01' THEN 'C'
+            WHEN SITUACAO = '02' THEN 'P'
+            WHEN SITUACAO >= '03' THEN 'S'
+            ELSE 'I'
+       END AS SITUACAO_LEIAUTE,
+       CASE WHEN SITUACAO = '00' THEN 'N'
+            WHEN SITUACAO = '01' THEN 'C'
+            WHEN SITUACAO = '02' THEN 'N'
+            WHEN SITUACAO = '03' THEN 'N'
+            WHEN SITUACAO = '04' THEN 'P'
+            WHEN SITUACAO >= '05' THEN 'S'
+            ELSE 'I'
+       END AS SITUACAO_REGRAS,
+       CASE WHEN SITUACAO = '00' THEN 'N'
+            WHEN SITUACAO = '01' THEN 'C'
+            WHEN SITUACAO = '02' THEN 'N'
+            WHEN SITUACAO = '03' THEN 'N'
+            WHEN SITUACAO = '04' THEN 'N'
+            WHEN SITUACAO = '05' THEN 'N'
+            WHEN SITUACAO = '06' THEN 'P'
+            WHEN SITUACAO = '07' THEN 'S'
+            ELSE 'I'
+       END AS SITUACAO_EFETIVA_REGISTROS,
+       (
+       select COUNT(1) from RHPBH_ARQUIVO_LOG
+        where ID_ARQUIVO = R.ID_ARQUIVO
+          and CODIGO_EMPRESA = R.CODIGO_EMPRESA
+          and CATEGORIA = 2
+          and TIPO = 99
+       ) AS QTDE_LOGS_LEIAUTE,
+       (
+       select COUNT(1) from RHPBH_ARQUIVO_LOG
+        where ID_ARQUIVO = R.ID_ARQUIVO
+          and CODIGO_EMPRESA = R.CODIGO_EMPRESA
+          and CATEGORIA = 3
+          and TIPO = 99
+       ) AS QTDE_LOGS_REGRAS,
+       (
+       select COUNT(1) from RHPBH_ARQUIVO_LOG
+        where ID_ARQUIVO = R.ID_ARQUIVO
+          and CODIGO_EMPRESA = R.CODIGO_EMPRESA
+          and CATEGORIA = 4
+          and TIPO = 99
+       ) AS QTDE_LOGS_EFETIVA_REGISTROS,
+       (
+       select COUNT(1) from RHPBH_ARQUIVO_LOG
+        where ID_ARQUIVO = R.ID_ARQUIVO
+          and CODIGO_EMPRESA = R.CODIGO_EMPRESA
+          and CATEGORIA = 4
+          and TIPO = 0
+       ) AS QTDE_REGISTROS_EFETIVADOS       
+       into
+  vSITUACAO_LEIAUTE,
+  vSITUACAO_REGRAS,
+  vSITUACAO_EFETIVA_REGISTROS,
+  vQTDE_LOGS_LEIAUTE,  
+  vQTDE_LOGS_REGRAS, 
+  vQTDE_LOGS_EFETIVA_REGISTROS,
+  vQTDE_REGISTROS_EFETIVADOS       
+  from RHPBH_ARQUIVO R
+  where ID_ARQUIVO = PID_ARQUIVO;
+    
+    EXCEPTION
+    WHEN OTHERS THEN
+       RAISE GERA_STATS_EXCEPTION;
+    END;    
+    
+    
+    
+    
+    BEGIN
+         update RHPBH_ARQUIVO_PROCESSA_STATS
+            set SITUACAO_LEIAUTE = vSITUACAO_LEIAUTE,
+                SITUACAO_REGRAS = vSITUACAO_REGRAS,
+                SITUACAO_EFETIVA_REGISTROS = vSITUACAO_EFETIVA_REGISTROS,
+                QTDE_LOGS_LEIAUTE = vQTDE_LOGS_LEIAUTE,  
+                QTDE_LOGS_REGRAS = vQTDE_LOGS_REGRAS,  
+                QTDE_LOGS_EFETIVA_REGISTROS = vQTDE_LOGS_EFETIVA_REGISTROS,  
+                QTDE_REGISTROS_EFETIVADOS = vQTDE_REGISTROS_EFETIVADOS, 
+                LOGIN_USUARIO = vLOGIN_USUARIO,
+                DT_ULT_ALTER_USUA = sysdate
+          where ID_ARQUIVO = PID_ARQUIVO;
+          
+          vLINHA_ATUALIZADA := sql%rowcount; 
+
+
+         IF vLINHA_ATUALIZADA = 0 THEN
+            insert into RHPBH_ARQUIVO_PROCESSA_STATS(
+              ID_ARQUIVO,
+              SITUACAO_LEIAUTE,
+              SITUACAO_REGRAS,
+              SITUACAO_EFETIVA_REGISTROS,
+              QTDE_LOGS_LEIAUTE,
+              QTDE_LOGS_REGRAS,
+              QTDE_LOGS_EFETIVA_REGISTROS,
+              QTDE_REGISTROS_EFETIVADOS,
+              LOGIN_USUARIO,
+              DT_ULT_ALTER_USUA
+            )
+            values(
+              vID_ARQUIVO,
+              vSITUACAO_LEIAUTE,
+              vSITUACAO_REGRAS,
+              vSITUACAO_EFETIVA_REGISTROS,
+              vQTDE_LOGS_LEIAUTE, 
+              vQTDE_LOGS_REGRAS,  
+              vQTDE_LOGS_EFETIVA_REGISTROS,  
+              vQTDE_REGISTROS_EFETIVADOS,
+              vLOGIN_USUARIO,
+              sysdate
+            );
+         END IF;
+                  
+    EXCEPTION
+    WHEN OTHERS THEN
+       RAISE GERA_STATS_EXCEPTION;
+    END;    
+
+    EXCEPTION
+    WHEN OTHERS THEN
+         RAISE GERA_STATS_EXCEPTION;
+    END;
+
+    COMMIT;
+END;

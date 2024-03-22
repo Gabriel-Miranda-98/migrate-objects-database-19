@@ -1,0 +1,19 @@
+
+  CREATE OR REPLACE EDITIONABLE TYPE "ARTERH"."TP_IMPORT_ADM_PER" force
+AS
+  OBJECT
+  (
+    CODIGO_EMPRESA               CHAR(4),
+    CODIGO_PESSOA                CHAR(15),
+    VERIFICA                     NUMBER,
+    APTIDAO                      CHAR (2),
+    OCORRENCIA                   NUMBER,
+    NOME_ATENDENTE_ATENDENTE     VARCHAR(70),
+    INSCRICAO_CONSELHO_ATENDENTE CHAR(30),
+    UF_CONSELHO_ATENDENTE        CHAR(4),
+    CODIGO_ATENDENTE             CHAR(15),
+    NATUREZA_EXAME               CHAR(40),
+    PROCEDIMENTO_CONDUTA         CHAR(1),
+    CONSELHO_REGIONAL_ATENDENTE  CHAR(4),
+    ACAO                         CHAR(12)
+);

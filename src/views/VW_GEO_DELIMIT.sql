@@ -1,0 +1,51 @@
+
+  CREATE OR REPLACE FORCE EDITIONABLE VIEW "PONTO_ELETRONICO"."VW_GEO_DELIMIT" ("CODIGO_EMPRESA", "AGRUPAMENTO_EMPRESA", "TIPO", "CODIGO_LEGADO", "DESCRICAO", "NOME", "LATITUDE", "LONGITUDE", "IP", "NRO", "RAIO", "DATA_IMPLANTACAO", "DATA_EXTINCAO", "DT_SAIU_ARTE", "DT_ENVIADO_IFPONTO_SURICATO", "CODIGO_INTEGRA_ARTE") AS 
+  SELECT CODIGO_EMPRESA,
+            AGRUPAMENTO_EMPRESA,
+            TIPO,
+            CODIGO_LEGADO,
+            DESCRICAO,
+            NOME,
+            LATITUDE,
+            LONGITUDE,
+            IP,
+            NRO,
+            RAIO,
+            DATA_IMPLANTACAO,
+            DATA_EXTINCAO,
+            DT_SAIU_ARTE,
+            DT_ENVIADO_IFPONTO_SURICATO
+            ,CODIGO_INTEGRA_ARTE --NOVO 4/7/22
+       FROM SMARH_INT_CAD_CERCA_DIGITAL
+      WHERE DT_ENVIADO_IFPONTO_SURICATO IS NULL
+   GROUP BY CODIGO_EMPRESA,
+            AGRUPAMENTO_EMPRESA,
+            TIPO,
+            CODIGO_LEGADO,
+            DESCRICAO,
+            NOME,
+            LATITUDE,
+            LONGITUDE,
+            IP,
+            NRO,
+            RAIO,
+            DATA_IMPLANTACAO,
+            DATA_EXTINCAO,
+            DT_SAIU_ARTE,
+            DT_ENVIADO_IFPONTO_SURICATO
+            ,CODIGO_INTEGRA_ARTE --NOVO 4/7/22
+   ORDER BY CODIGO_EMPRESA,
+            AGRUPAMENTO_EMPRESA,
+            TIPO,
+            CODIGO_LEGADO,
+            DESCRICAO,
+            NOME,
+            LATITUDE,
+            LONGITUDE,
+            IP,
+            NRO,
+            RAIO,
+            DATA_IMPLANTACAO,
+            DATA_EXTINCAO,
+            DT_SAIU_ARTE,
+            DT_ENVIADO_IFPONTO_SURICATO

@@ -1,0 +1,426 @@
+
+  CREATE OR REPLACE EDITIONABLE TRIGGER "ARTERH"."TR_FERIAS" AFTER--before
+  INSERT OR
+  UPDATE OR
+  DELETE ON "ARTERH"."RHFERI_FERIAS" FOR EACH ROW 
+  
+-- WHEN (NEW.CODIGO_EMPRESA not in ('0003','0013','0014') or OLD.CODIGO_EMPRESA NOT IN ('0003','0013','0014')) 
+--WHEN (NEW.CODIGO_EMPRESA not in ('0002','0007','0009','0010') or OLD.CODIGO_EMPRESA NOT IN ('0002','0007','0009','0010')) --adicionado em 22/7/20 previsao de desativar em 7/8/20 empresas 0002 PRODABEL, 0007 SLU, 0009 BELOTUR E 0010 URBEL 
+
+   DECLARE vTIPO_DML VARCHAR2(1); 
+  vCODIGO_EMPRESA_NEW     VARCHAR2(4);
+  vCODIGO_EMPRESA_OLD     VARCHAR2(4);
+  vTIPO_CONTRATO_NEW      VARCHAR2(4);
+  vTIPO_CONTRATO_OLD      VARCHAR2(4);
+  vCODIGO_CONTRATO_NEW    VARCHAR2(15);
+  vCODIGO_CONTRATO_OLD    VARCHAR2(15);
+  vOLD_DT_INI_AQUISICAO   DATE;
+  vNEW_DT_INI_AQUSICAO    DATE;
+  vOLD_DT_FIM_AQUISICAO   DATE;
+  vNEW_DT_FIM_AQUISICAO   DATE;
+  vOLD_PERIODO            VARCHAR(10);
+  vNEW_PERIODO            VARCHAR(10);
+  vOLD_DT_INI_GOZO        DATE;
+  vNEW_DT_INI_GOZO        DATE;
+  vOLD_DT_FIM_GOZO        DATE;
+  vNEW_DT_FIM_GOZO        DATE;
+  vOLD_DT_RETORNO         DATE;
+  vNEW_DT_RETORNO         DATE;
+  vSTATUS_CONFIRMACAO     VARCHAR(5);
+  vOLD_LOGIN_USUARIO      VARCHAR(100);
+  vNEW_LOGIN_USUARIO      VARCHAR(100);
+  vOLD_DT_ULT_ALTER_USUA  DATE;
+  vNEW_DT_ULT_ALTER_USUA  DATE;
+  vOLD_TIPO_FERIAS        VARCHAR(10);
+  vNEW_TIPO_FERIAS        VARCHAR(10);
+  vLOGIN_USUARIO_NEW      VARCHAR2(100);
+  vLOGIN_USUARIO_OLD      VARCHAR2(100);
+  vOLD_STATUS_CONFIRMACAO VARCHAR (10);
+  vNEW_STATUS_CONFIRMACAO VARCHAR (10);
+
+vULT_ID number;
+
+vCODIGO_EMPRESA VARCHAR2(4);
+vTIPO_CONTRATO VARCHAR2(4);
+vCODIGO VARCHAR2(15);
+
+  BEGIN
+
+vULT_ID := 0;
+    --vTIPO_DML :=
+    vCODIGO_EMPRESA_NEW     := :NEW.CODIGO_EMPRESA;
+    vCODIGO_EMPRESA_OLD     := :OLD.CODIGO_EMPRESA;
+    vTIPO_CONTRATO_NEW      := :NEW.TIPO_CONTRATO;
+    vTIPO_CONTRATO_OLD      := :OLD.TIPO_CONTRATO;
+    vCODIGO_CONTRATO_NEW    := :NEW.CODIGO_CONTRATO;
+    vCODIGO_CONTRATO_OLD    := :OLD.CODIGO_CONTRATO;
+    vOLD_DT_INI_AQUISICAO   := :OLD.DT_INI_AQUISICAO;
+    vNEW_DT_INI_AQUSICAO    := :NEW.DT_INI_AQUISICAO;
+    vOLD_DT_FIM_AQUISICAO   := :OLD.DT_FIM_AQUISICAO;
+    vNEW_DT_FIM_AQUISICAO   := :NEW.DT_FIM_AQUISICAO;
+    vOLD_DT_INI_GOZO        := :OLD.DT_INI_GOZO;
+    vNEW_DT_INI_GOZO        := :NEW.DT_INI_GOZO;
+    vOLD_DT_FIM_GOZO        := :OLD.DT_FIM_GOZO;
+    vNEW_DT_FIM_GOZO        := :NEW.DT_FIM_GOZO;
+    vOLD_DT_RETORNO         := :OLD.DT_RETORNO;
+    vNEW_DT_RETORNO         := :NEW.DT_RETORNO;
+    vOLD_STATUS_CONFIRMACAO := :OLD.STATUS_CONFIRMACAO;
+    vNEW_STATUS_CONFIRMACAO := :NEW.STATUS_CONFIRMACAO;
+    vOLD_LOGIN_USUARIO      := :OLD.LOGIN_USUARIO;
+    vNEW_LOGIN_USUARIO      := :NEW.LOGIN_USUARIO;
+    vOLD_DT_ULT_ALTER_USUA  := :OLD.DT_ULT_ALTER_USUA;
+    vNEW_DT_ULT_ALTER_USUA  := :NEW.DT_ULT_ALTER_USUA;
+    vOLD_TIPO_FERIAS        := :OLD.TIPO_FERIAS;
+    vNEW_TIPO_FERIAS        := :NEW.TIPO_FERIAS;
+    vOLD_PERIODO            := :OLD.PERIODO;
+    vNEW_PERIODO            := :NEW.PERIODO;
+vCODIGO_EMPRESA := NULL;
+vTIPO_CONTRATO := NULL;
+vCODIGO := NULL;
+
+
+    IF INSERTING THEN
+      vTIPO_DML:='I';
+
+vCODIGO_EMPRESA := :NEW.CODIGO_EMPRESA;
+vTIPO_CONTRATO := :NEW.TIPO_CONTRATO;
+vCODIGO := :NEW.CODIGO_CONTRATO;
+
+      /* SELECT DT_INI_AQUISICAO,
+      DT_FIM_AQUISICAO,
+      TIPO_FERIAS,
+      DT_INI_GOZO,
+      DT_FIM_GOZO,
+      LOGIN_USUARIO,
+      DT_RETORNO,
+      STATUS_CONFIRMACAO,
+      PERIODO
+      INTO vOLD_DT_INI_AQUISICAO,
+      vOLD_DT_FIM_AQUISICAO,
+      vOLD_TIPO_FERIAS,
+      vOLD_DT_INI_GOZO,
+      vOLD_DT_FIM_GOZO,
+      vOLD_LOGIN_USUARIO,
+      vOLD_DT_RETORNO,
+      vOLD_STATUS_CONFIRMACAO,
+      vOLD_PERIODO
+      FROM RHFERI_FERIAS
+      WHERE CODIGO_EMPRESA = :NEW.CODIGO_EMPRESA
+      AND TIPO_CONTRATO    = :NEW.CODIGO_CONTRATO
+      AND CODIGO_CONTRATO  = :NEW.CODIGO_CONTRATO
+      AND CODIGO_CONTRATO=(SELECT MAX(CODIGO)FROM RHPESS_CONTRATO C WHERE C.CODIGO_EMPRESA=RHFERI_FERIAS.CODIGO_EMPRESA
+      C.CODIGO=RHFERI_FERIAS.CODIGO_CONTRATO
+      C.TIPO_CONTRATO=RHFERI_FERIAS.TIPO_CONTRATO;*/
+      INSERT
+      INTO PONTO_ELETRONICO.SUGESP_BI_RHFERI_FERIAS
+        (
+        ID,
+          TIPO_COMANDO,
+          CODIGO_EMPRESA,
+          TIPO_CONTRATO,
+          CODIGO_CONTRATO,
+          NEW_DT_INI_AQUISICAO,
+          NEW_DT_FIM_AQUISICAO,
+          NEW_TIPO_FERIAS,
+          NEW_DT_INI_GOZO,
+          NEW_DT_FIM_GOZO,
+          NEW_LOGIN_USUARIO,
+          DT_ULT_ALTER_USUA,
+          NEW_DT_RETORNO,
+          NEW_STATUS_CONFIRMACAO,
+          NEW_PERIODO
+        )
+        VALUES
+        (
+        ARTERH.SEQUENCE_FERIAS.NEXTVAL,--ate 16-7/20--(SELECT MAX(ID)+1 FROM PONTO_ELETRONICO.SUGESP_BI_RHFERI_FERIAS),
+          vTIPO_DML,
+          :NEW.CODIGO_EMPRESA,
+          :NEW.TIPO_CONTRATO,
+          :NEW.CODIGO_CONTRATO,
+          :NEW.DT_INI_AQUISICAO,
+          :NEW.DT_FIM_AQUISICAO,
+          :NEW.TIPO_FERIAS,
+          :NEW.DT_INI_GOZO,
+          :NEW.DT_FIM_GOZO,
+          :NEW.LOGIN_USUARIO,
+          SYSDATE,
+          :NEW.DT_RETORNO,
+          :NEW.STATUS_CONFIRMACAO,
+          :NEW.PERIODO
+        );
+
+        /* INICIO ---- INSERIDO EM 10/06/2021 - LETICIA */
+
+        IF ( :NEW.TIPO_FERIAS IN ('0004','0006','0008','0017') )  THEN
+          INSERT
+          INTO RHFERI_SOL_FERIAS
+            (
+              CODIGO_EMPRESA,
+              TIPO_CONTRATO,
+              CODIGO_CONTRATO,
+              DATA_SOLICITACAO,
+              OCORRENCIA,
+              TIPO_FERIAS,
+              DT_INI_AQUISICAO,
+              DT_FIM_AQUISICAO,
+              dt_ini_gozo,
+              dt_fim_gozo,
+              DIAS_GOZO_FORCA,
+              PERIODO,
+              STATUS_CONFIRMACAO,
+              PROCESSO,
+              data_pagto_ferias,
+              observacao,
+              LOGIN_USUARIO,   
+              DT_ULT_ALTER_USUA    
+
+            )
+            VALUES
+            (
+              :NEW.CODIGO_EMPRESA,
+              :NEW.TIPO_CONTRATO,
+              :NEW.CODIGO_CONTRATO,
+              SYSDATE,
+              (SELECT
+                CASE
+                  WHEN MAX(OCORRENCIA) IS NULL
+                  THEN 1
+                  ELSE MAX(ocorrencia)+1
+                END OCORRENCIA
+              FROM RHFERI_SOL_FERIAS
+              WHERE CODIGO_EMPRESA = :NEW.CODIGO_EMPRESA
+              AND TIPO_CONTRATO    = :NEW.TIPO_CONTRATO
+              AND CODIGO_CONTRATO  = :NEW.CODIGO_CONTRATO
+             /* AND TIPO_FERIAS      = :NEW.TIPO_FERIAS
+              AND DT_INI_AQUISICAO = :NEW.DT_INI_AQUISICAO
+              AND DT_FIM_AQUISICAO = :NEW.DT_FIM_AQUISICAO
+              AND PERIODO          = :NEW.PERIODO */
+              AND trunc(DATA_SOLICITACAO) = trunc(sysdate)
+              ),
+              :NEW.TIPO_FERIAS, 
+              :NEW.DT_INI_AQUISICAO,
+              :NEW.DT_FIM_AQUISICAO,
+              :NEW.DT_INI_GOZO,
+              :NEW.DT_FIM_GOZO,
+              :NEW.DIAS_GOZO_FORCA, 
+              :NEW.PERIODO, 
+              :NEW.STATUS_CONFIRMACAO, 
+              :NEW.PROCESSO, 
+              :NEW.c_livre_data01,
+              :new.observacao,
+              :NEW.LOGIN_USUARIO,   
+              SYSDATE    
+          );
+
+        END IF;
+
+
+         /* FIM ---- INSERIDO EM 10/06/2021 - LETICIA */
+
+    ELSIF UPDATING THEN
+      vTIPO_DML:= 'U';
+
+vCODIGO_EMPRESA := :NEW.CODIGO_EMPRESA;
+vTIPO_CONTRATO := :NEW.TIPO_CONTRATO;
+vCODIGO := :NEW.CODIGO_CONTRATO;
+
+      INSERT
+      INTO PONTO_ELETRONICO.SUGESP_BI_RHFERI_FERIAS
+        (
+        ID,
+          TIPO_COMANDO,
+          CODIGO_EMPRESA,
+          TIPO_CONTRATO,
+          CODIGO_CONTRATO,
+          NEW_DT_INI_AQUISICAO,
+          NEW_DT_FIM_AQUISICAO,
+          NEW_TIPO_FERIAS,
+          NEW_DT_INI_GOZO,
+          NEW_DT_FIM_GOZO,
+          NEW_LOGIN_USUARIO,
+
+          NEW_DT_RETORNO,
+          NEW_STATUS_CONFIRMACAO,
+          NEW_PERIODO,
+          OLD_DT_INI_AQUISICAO,
+          OLD_DT_FIM_AQUISICAO,
+          OLD_TIPO_FERIAS,
+          OLD_DT_INI_GOZO,
+          OLD_DT_FIM_GOZO,
+          OLD_LOGIN_USUARIO,
+          DT_ULT_ALTER_USUA,
+          OLD_DT_RETORNO,
+          OLD_STATUS_CONFIRMACAO,
+          OLD_PERIODO
+        )
+        VALUES
+        (
+        ARTERH.SEQUENCE_FERIAS.NEXTVAL,--ate 16-7/20--(SELECT MAX(ID)+1 FROM ponto_eletronico.SUGESP_BI_RHFERI_FERIAS),
+          vTIPO_DML,
+          :OLD.CODIGO_EMPRESA,
+          :OLD.TIPO_CONTRATO,
+          :OLD.CODIGO_CONTRATO,
+          :NEW.DT_INI_AQUISICAO,
+          :NEW.DT_FIM_AQUISICAO,
+          :NEW.TIPO_FERIAS,
+          :NEW.DT_INI_GOZO,
+          :NEW.DT_FIM_GOZO,
+          :NEW.LOGIN_USUARIO,
+
+          :NEW.DT_RETORNO,
+          :NEW.STATUS_CONFIRMACAO,
+          :NEW.PERIODO,
+          :OLD.DT_INI_AQUISICAO,
+          :OLD.DT_FIM_AQUISICAO,
+          :OLD.TIPO_FERIAS,
+          :OLD.DT_INI_GOZO,
+          :OLD.DT_FIM_GOZO,
+          :OLD.LOGIN_USUARIO,
+          SYSDATE,
+          :OLD.DT_RETORNO,
+          :OLD.STATUS_CONFIRMACAO,
+          :OLD.PERIODO
+        );
+
+         /* INICIO ---- INSERIDO EM 10/06/2021 - LETICIA */
+
+        IF ( :NEW.TIPO_FERIAS IN ('0004','0006','0008','0017') )  THEN
+          INSERT
+          INTO RHFERI_SOL_FERIAS
+            (
+              CODIGO_EMPRESA,
+              TIPO_CONTRATO,
+              CODIGO_CONTRATO,
+              DATA_SOLICITACAO,
+              OCORRENCIA,
+              TIPO_FERIAS,
+              DT_INI_AQUISICAO,
+              DT_FIM_AQUISICAO,
+              dt_ini_gozo,
+              dt_fim_gozo,
+              DIAS_GOZO_FORCA,
+              PERIODO,
+              STATUS_CONFIRMACAO,
+              PROCESSO,
+              data_pagto_ferias,
+              observacao,
+              LOGIN_USUARIO,   
+              DT_ULT_ALTER_USUA    
+
+            )
+            VALUES
+            (
+              :NEW.CODIGO_EMPRESA,
+              :NEW.TIPO_CONTRATO,
+              :NEW.CODIGO_CONTRATO,
+              SYSDATE,
+              (SELECT
+                CASE
+                  WHEN MAX(OCORRENCIA) IS NULL
+                  THEN 1
+                  ELSE MAX(ocorrencia)+1
+                END OCORRENCIA
+              FROM RHFERI_SOL_FERIAS
+              WHERE CODIGO_EMPRESA = :NEW.CODIGO_EMPRESA
+              AND TIPO_CONTRATO    = :NEW.TIPO_CONTRATO
+              AND CODIGO_CONTRATO  = :NEW.CODIGO_CONTRATO
+              /*AND TIPO_FERIAS      = :NEW.TIPO_FERIAS
+              AND DT_INI_AQUISICAO = :NEW.DT_INI_AQUISICAO
+              AND DT_FIM_AQUISICAO = :NEW.DT_FIM_AQUISICAO
+              AND PERIODO          = :NEW.PERIODO*/
+              AND trunc(DATA_SOLICITACAO) = trunc(sysdate)
+              ),
+              :NEW.TIPO_FERIAS, 
+              :NEW.DT_INI_AQUISICAO,
+              :NEW.DT_FIM_AQUISICAO,
+              :NEW.DT_INI_GOZO,
+              :NEW.DT_FIM_GOZO,
+              :NEW.DIAS_GOZO_FORCA, 
+              :NEW.PERIODO, 
+              :NEW.STATUS_CONFIRMACAO, 
+              :NEW.PROCESSO, 
+              :NEW.c_livre_data01,
+              :new.observacao,
+              :NEW.LOGIN_USUARIO,   
+              SYSDATE    
+          );
+
+        END IF;
+
+
+         /* FIM ---- INSERIDO EM 10/06/2021 - LETICIA */
+
+
+
+    ELSIF DELETING THEN
+      vTIPO_DML:= 'D';
+
+vCODIGO_EMPRESA := :OLD.CODIGO_EMPRESA;
+vTIPO_CONTRATO := :OLD.TIPO_CONTRATO;
+vCODIGO := :OLD.CODIGO_CONTRATO;
+
+      INSERT
+      INTO PONTO_ELETRONICO.SUGESP_BI_RHFERI_FERIAS
+        (
+        ID,
+          TIPO_COMANDO,
+          CODIGO_EMPRESA,
+          TIPO_CONTRATO,
+          CODIGO_CONTRATO,
+          OLD_DT_INI_AQUISICAO,
+          OLD_DT_FIM_AQUISICAO,
+          OLD_TIPO_FERIAS,
+          OLD_DT_INI_GOZO,
+          OLD_DT_FIM_GOZO,
+          OLD_LOGIN_USUARIO,
+          DT_ULT_ALTER_USUA,
+          OLD_DT_RETORNO,
+          OLD_STATUS_CONFIRMACAO,
+          OLD_PERIODO
+        )
+        VALUES
+        (
+        ARTERH.SEQUENCE_FERIAS.NEXTVAL,--ate 16-7/20--(SELECT MAX(ID)+1 FROM ponto_eletronico.SUGESP_BI_RHFERI_FERIAS),
+          vTIPO_DML,
+          :OLD.CODIGO_EMPRESA,
+          :OLD.TIPO_CONTRATO,
+          :OLD.CODIGO_CONTRATO,
+          :OLD.DT_INI_AQUISICAO,
+          :OLD.DT_FIM_AQUISICAO,
+          :OLD.TIPO_FERIAS,
+          :OLD.DT_INI_GOZO,
+          :OLD.DT_FIM_GOZO,
+          :OLD.LOGIN_USUARIO,
+          SYSDATE,
+          :OLD.DT_RETORNO,
+          :OLD.STATUS_CONFIRMACAO,
+          :OLD.PERIODO
+        );
+
+
+
+    END IF ;
+
+--------------------------------------------------------------------------------CHAMAR PROCEDURE PARA TODA LOGICA NO NOVO CENARIO TABELA RHPONT_RES_SIT_DIA
+--DESATIVADA EM 30/9/19 ATE RESOLVER O PROBLEMA DE NÃO GRAVAR CORRETAMENTE NO CONTRATO
+--REATIVADA 4/10/19
+--/*
+IF --reativada parte com o IF em 28/4/21 apos email nessa data (Erro - Lançamento licença prêmio)
+((vTIPO_DML = 'I' AND :NEW.DT_INI_GOZO IS NOT NULL AND :NEW.DT_FIM_GOZO IS NOT NULL)OR(vTIPO_DML = 'D' AND :OLD.DT_INI_GOZO IS NOT NULL AND :OLD.DT_FIM_GOZO IS NOT NULL)OR ((vTIPO_DML = 'U' AND :NEW.DT_INI_GOZO IS NOT NULL AND :NEW.DT_FIM_GOZO IS NOT NULL)OR(vTIPO_DML = 'U' AND :OLD.DT_INI_GOZO IS NOT NULL AND :OLD.DT_FIM_GOZO IS NOT NULL)))--novo em 15/1/21
+THEN
+
+
+
+select ID into vULT_ID FROM ponto_eletronico.SUGESP_BI_RHFERI_FERIAS WHERE ID = (SELECT MAX(ID) FROM ponto_eletronico.SUGESP_BI_RHFERI_FERIAS WHERE CODIGO_EMPRESA = vCODIGO_EMPRESA AND TIPO_CONTRATO = vTIPO_CONTRATO AND CODIGO_CONTRATO = vCODIGO
+--AND((TIPO_COMANDO = 'I' AND NEW_DT_INI_GOZO IS NOT NULL AND NEW_DT_FIM_GOZO IS NOT NULL)OR(TIPO_COMANDO = 'D' AND OLD_DT_INI_GOZO IS NOT NULL AND OLD_DT_FIM_GOZO IS NOT NULL)OR  ((TIPO_COMANDO = 'U' AND NEW_DT_INI_GOZO IS NOT NULL AND NEW_DT_FIM_GOZO IS NOT NULL)OR(TIPO_COMANDO = 'U' AND OLD_DT_INI_GOZO IS NOT NULL AND OLD_DT_FIM_GOZO IS NOT NULL)))--novo em 15/1/21
+);
+SUGESP_RES_SIT_DIA_V4('FERIAS', vULT_ID);
+
+END IF;
+--*/
+--------------------------------------------------------------------------------CHAMAR PROCEDURE PARA TODA LOGICA NO NOVO CENARIO TABELA RHPONT_RES_SIT_DIA
+
+  END;
+
+
+ALTER TRIGGER "ARTERH"."TR_FERIAS" ENABLE

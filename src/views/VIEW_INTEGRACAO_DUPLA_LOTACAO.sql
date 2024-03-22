@@ -1,0 +1,13 @@
+
+  CREATE OR REPLACE FORCE EDITIONABLE VIEW "ARTERH"."VIEW_INTEGRACAO_DUPLA_LOTACAO" ("DADO_ORIGEM", "DADO_DESTINO", "COD_UNIDADE1", "COD_UNIDADE2", "COD_UNIDADE3", "COD_UNIDADE4", "COD_UNIDADE5", "COD_UNIDADE6", "CHAVE_SAUDE") AS 
+  SELECT dado_origem,
+DADO_DESTINO,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 1)AS COD_UNIDADE1,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 2)AS COD_UNIDADE2,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 3)AS COD_UNIDADE3,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 4)AS COD_UNIDADE4,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 5)AS COD_UNIDADE5,
+regexp_substr(REPLACE(DADO_DESTINO,'..','. .'), '[^.]+', 1, 6)AS COD_UNIDADE6,
+regexp_substr(REPLACE(dado_origem,'--','- -'), '[^-]+', 1, 2)AS chave_saude
+
+FROM ARTERH.RHINTE_ED_IT_CONV WHERE CODIGO_CONVERSAO='DLTC'

@@ -1,0 +1,1392 @@
+
+  CREATE OR REPLACE EDITIONABLE FUNCTION "ARTERH"."FU_PS_PROCESSAR_REG_BENEFIC" (Numero_linha IN NUMBER, LinhaTexto IN VARCHAR2, NomeArquivo IN VARCHAR2, DataCarga IN DATE, listaFornecedores IN VARCHAR2, INDICADOR_TESTE BOOLEAN)
+RETURN RETORNO_PROCESSAMENTO
+ IS
+  REG_LOG LOG_PROCESSAMENTO;
+  vLISTA_LOG LISTA_LOG;
+  vRETORNO RETORNO_PROCESSAMENTO;
+
+  LISTA_TIPO_RELACI_VALIDO LISTA;
+  LISTA_ESTADO_CIVIL_VALIDO LISTA;
+  LISTA_TIPO_LOGRADOURO_VALIDO LISTA;
+  LISTA_TIPO_BENEFICIO LISTA;
+
+  LISTA_TIPO_RELACI_IS LISTA;
+  LISTA_ESTADO_CIVIL_IS LISTA;
+  LISTA_TIPO_LOGRADOURO_IS LISTA;
+
+  TIPO_ALFANUMERICO     CONSTANT NUMBER := 1;
+  TIPO_NUMERICO         CONSTANT NUMBER := 2;
+  TIPO_DATA             CONSTANT NUMBER := 3;
+  TIPO_DATA_HORA        CONSTANT NUMBER := 4;
+  TIPO_SIM_NAO          CONSTANT NUMBER := 5;
+  TIPO_VALOR            CONSTANT NUMBER := 6;
+  SIM                   CONSTANT NUMBER := 1;
+  NAO                   CONSTANT NUMBER := 0;
+
+  TIPO_LOG_SUCESSO      CONSTANT NUMBER := 0;
+  TIPO_LOG_INFO         CONSTANT NUMBER := 2;
+  TIPO_LOG_ALERTA       CONSTANT NUMBER := 2;
+  TIPO_LOG_ERRO         CONSTANT NUMBER := 99;
+
+  OBJETO_PESSOA         CONSTANT VARCHAR2(40) := 'd_mantem_pessoa1';
+  OBJETO_PESSOA_PESSOA  CONSTANT VARCHAR2(40) := 'd_mantem_relac_pess_pess';
+
+  PREFIXO_CODIGO_FORNECEDOR    CONSTANT VARCHAR2(1) := 'F';
+  PREFIXO_CODIGO_BENEFICIO     CONSTANT VARCHAR2(1) := 'B';
+
+  TAMANHO_MAXIMO_LINHA  CONSTANT NUMBER := 398;
+  FORMATO_DATA          CONSTANT VARCHAR2(8)  := 'DDMMYYYY';
+  FORMATO_DATA_HORA     CONSTANT VARCHAR2(16) := 'DDMMYYYYHH24MISS';
+
+
+  TYPE REGISTRO_APOIO_LOG_SISTEMA is RECORD(
+  CODIGO_EMPRESA             CHAR(4),
+  CODIGO_PESSOA_TITULAR      CHAR(15),
+  TIPO_RELACIONAMENTO        CHAR(4),
+  CODIGO_PESSOA_BENEFICIARIO CHAR(15),
+  OCORRENCIA                 NUMBER(4)
+  );
+
+  REG_APOIO_LOG_SIST REGISTRO_APOIO_LOG_SISTEMA;
+
+  TYPE REGISTRO is RECORD (
+     TIPO_OPERACAO CHAR(15),
+     CODIGO_EMPRESA CHAR(4),
+     CODIGO_CONTRATO CHAR(15),
+     CPF CHAR(11),
+     NOME VARCHAR2(60),
+     DATA_NASCIMENTO DATE,
+     CODIGO_SEXO CHAR(4),
+     CODIGO_TIPO_RELACIONAMENTO CHAR(4),
+     CODIGO_ESTADO_CIVIL CHAR(4),
+     IDENTIDADE VARCHAR2(20),
+     NOME_DA_MAE VARCHAR2(60),
+     CODIGO_TIPO_LOGRADOURO CHAR(4),
+     ENDERECO VARCHAR2(40),
+     NUMERO VARCHAR2(10),
+     COMPLEMENTO VARCHAR2(40),
+     BAIRRO VARCHAR2(40),
+     CODIGO_MUNICIPIO CHAR(7),
+     UF CHAR(2),
+     CEP CHAR(8),
+     TELEFONE_FIXO CHAR(10),
+     TELEFONE_CELULAR CHAR(11),
+     DATA_CADASTRAMENTO DATE
+    );
+
+  TYPE INTERFACE is RECORD (
+    CAMPO      VARCHAR2(1000),
+    TAMANHO    NUMBER,
+    TAMANHO_IS NUMBER,
+    TIPO       NUMBER,
+    TIPO_IS    NUMBER,
+    NULO       NUMBER,
+    VALOR      VARCHAR2(1000)
+    );
+
+    V_CONTEUDO VARCHAR2(1000);
+    V_TEXTO VARCHAR2(1000);
+    V_NUMERICO NUMBER;
+    V_DATA DATE;
+
+  TYPE LISTA_CAMPOS is RECORD (
+    CONTEUDO    VARCHAR2(1000)
+    );
+
+   TYPE INTERFACE_SERVIDOR IS VARRAY(22) OF INTERFACE;
+
+   TYPE LISTA_CAMPOS_SERVIDOR IS VARRAY(10000) OF LISTA_CAMPOS;
+
+   I_S INTERFACE_SERVIDOR;
+   REG LISTA_CAMPOS_SERVIDOR;
+
+   /*TYPE TAB_CONCESSAO IS TABLE OF CONCESSAO
+      INDEX BY BINARY_INTEGER; */
+   REGISTRO_BENEFICIARIO REGISTRO;
+   --REG_CONCESSAO REGISTRO_BENEFICIARIO;
+
+   vCONTEUDO VARCHAR2(1000);
+   vCAMPO VARCHAR2(1000);
+   vCARACTERE CHAR(1);
+   vCARACTERE_TRANSLATE CHAR(1);
+   vCONTADOR NUMBER;
+   vTAM_REGISTRO  NUMBER;
+   vTAM_INTERFACE NUMBER;
+   vTAM_LOOP      NUMBER;
+   vTAM_LINHA     NUMBER;
+   vTAM_CAMPO     NUMBER;
+   vCONTADOR_CAMPO NUMBER;
+   vCAMPO_PODE_SER_NULO BOOLEAN;
+   vUSUARIO VARCHAR2(15) := 'IMPORT_PS';
+   vUSUARIO_ATUALIZACAO VARCHAR2(15) := 'IMPORT_PS_A';
+   vDATA_ATUALIZACAO DATE;
+   vTIPO_CONTRATO CHAR(4) := '0001';
+   vCODIGO_PESSOA CHAR(15);
+   vCODIGO_PESSOA_TITULAR CHAR(15);
+   vCODIGO_PESSOA_BENEFICIARIO CHAR(15);
+   vTIPO_RELACIONAMENTO CHAR(4);
+   vDATA_NASCIMENTO DATE;
+   vIDADE NUMBER;
+   vJA_POSSUI_PLANO_SAUDE NUMBER;
+   vOCORRENCIA NUMBER;
+   vCPF_VALIDO BOOLEAN;
+
+   vPESSOA_NOME VARCHAR2(60);
+   vPESSOA_DATA_NASCIMENTO DATE;
+   vPESSOA_SEXO CHAR(4);
+   vPESSOA_ESTADO_CIVIL CHAR(4);
+   vPESSOA_IDENTIDADE CHAR(20);
+   vPESSOA_NOME_DA_MAE VARCHAR2(60);
+
+   vNUMERO_OCORRENCIA_LOG NUMBER;
+   vDATA_ALTERACAO_LOG DATE;
+   vHOUVE_ALTERACAO_DADOS BOOLEAN := FALSE;
+
+FUNCTION OBTER_OCORRENCIA_LOG(pData IN DATE)
+RETURN CHAR IS
+BEGIN
+
+  IF vNUMERO_OCORRENCIA_LOG IS NULL THEN
+
+     vNUMERO_OCORRENCIA_LOG := 1;
+     vDATA_ALTERACAO_LOG := pData;
+     dbms_output.put_line('OCORRENCIA 1 - ' || vNUMERO_OCORRENCIA_LOG || TO_CHAR(pData,'DD/MM/YYYY HH24:MI:SS')|| TO_CHAR(vDATA_ALTERACAO_LOG,'DD/MM/YYYY HH24:MI:SS'));
+  ELSE
+    IF vDATA_ALTERACAO_LOG <> pData THEN
+       vNUMERO_OCORRENCIA_LOG := 1;
+       vDATA_ALTERACAO_LOG := pData;
+            dbms_output.put_line('OCORRENCIA 2 - ' || vNUMERO_OCORRENCIA_LOG || TO_CHAR(pData,'DD/MM/YYYY HH24:MI:SS')|| TO_CHAR(vDATA_ALTERACAO_LOG,'DD/MM/YYYY HH24:MI:SS'));
+    ELSE
+        vNUMERO_OCORRENCIA_LOG := vNUMERO_OCORRENCIA_LOG + 1;
+        vDATA_ALTERACAO_LOG := pData;
+             dbms_output.put_line('OCORRENCIA 3 - ' || vNUMERO_OCORRENCIA_LOG || TO_CHAR(pData,'DD/MM/YYYY HH24:MI:SS') || TO_CHAR(vDATA_ALTERACAO_LOG,'DD/MM/YYYY HH24:MI:SS'));
+    END IF;
+  END IF;
+RETURN vNUMERO_OCORRENCIA_LOG;
+END;
+
+FUNCTION OBTER_CODIGO_PESSOA_BENEFIC(pCODIGO_EMPRESA IN CHAR, pTIPO_CONTRATO IN CHAR, pCODIGO_CONTRATO_TITULAR IN VARCHAR2)
+RETURN CHAR IS
+vID_MAX NUMBER;
+vID NUMBER;
+vNUMERO_BASE_CONTRATO CHAR(11);
+vNUMERO_SEQUENCIAL_DEPENDENTE CHAR(4);
+begin
+vID_MAX := NULL;
+vNUMERO_BASE_CONTRATO := SUBSTR(pCODIGO_CONTRATO_TITULAR,5);
+for c1 in(
+   select SUBSTR(CODIGO, 12) AS SEQUENCIAL
+      from RHPESS_PESSOA
+     where CODIGO_EMPRESA = pCODIGO_EMPRESA
+       and CODIGO like (vNUMERO_BASE_CONTRATO||'%')
+       AND DT_TERMINO IS NULL
+       and CODIGO <> (
+                       select CODIGO_PESSOA
+                         from RHPESS_CONTRATO A
+                        where A.CODIGO_EMPRESA = pCODIGO_EMPRESA
+                          and A.TIPO_CONTRATO = pTIPO_CONTRATO
+                          and A.CODIGO = pCODIGO_CONTRATO_TITULAR
+                          and A.ANO_MES_REFERENCIA = (select max(ANO_MES_REFERENCIA)
+                                                        from RHPESS_CONTRATO B
+                                                       where B.CODIGO_EMPRESA = A.CODIGO_EMPRESA
+                                                         and B.TIPO_CONTRATO = A.TIPO_CONTRATO
+                                                         and B.CODIGO = A.CODIGO
+                                                      )
+                       ) order by CODIGO
+)
+loop
+
+    BEGIN
+       vID:= TO_NUMBER(C1.SEQUENCIAL);
+    EXCEPTION
+    WHEN OTHERS THEN
+       NULL;
+    END;
+
+    IF vID_MAX IS NULL THEN
+          vID_MAX := 1;
+          IF (vID > vID_MAX) THEN
+             vID_MAX := vID;
+          END IF;
+    ELSE
+      IF (vID - vID_MAX = 1) THEN
+         vID_MAX := vID;
+      END IF;
+    END IF;
+
+end loop;
+
+    IF vID_MAX IS NULL THEN
+          vID_MAX := 0;
+    END IF;
+
+vNUMERO_SEQUENCIAL_DEPENDENTE := LPAD(vID_MAX+1, 4, '0');
+RETURN LPAD(vNUMERO_BASE_CONTRATO || vNUMERO_SEQUENCIAL_DEPENDENTE, 15, '0');
+
+END;
+
+PROCEDURE GRAVA_LOG(TipoLog IN NUMBER, Numero_linha IN NUMBER, DescricaoLog IN VARCHAR2, DetalheLog IN VARCHAR2) AS
+BEGIN
+
+REG_LOG.TIPO_LOG := TipoLog;
+REG_LOG.DESCRICAO_LOG := DescricaoLog;
+REG_LOG.DETALHE_LOG := DetalheLog;
+
+vLISTA_LOG.Extend;
+vLISTA_LOG(vLISTA_LOG.count) := REG_LOG;
+/*
+     INSERT INTO RHPBH_PS_IMPORTACAO_LOG(ID_LOG, TIPO_ARQUIVO, DATA_IMPORTACAO, TIPO, LINHA, DESCRICAO, DETALHE)
+     values (SQ_RHPBH_PS_IMPORTACAO_LOG.NEXTVAL, NomeArquivo, DataCarga, TipoLog, Numero_linha, DescricaoLog, DetalheLog);
+     COMMIT;
+*/
+END;
+
+PROCEDURE GRAVA_LOG_SISTEMA(pDataAlteracao IN DATE, pObjeto IN VARCHAR2, pUsuario IN VARCHAR2, pOperacao IN CHAR, pReg IN REGISTRO_APOIO_LOG_SISTEMA) AS
+vTERMINAL_ESTACAO_REDE VARCHAR2(40);
+vKEY_STR VARCHAR2(2000);
+vOCORRENCIA NUMBER;
+BEGIN
+GRAVA_LOG(TIPO_LOG_INFO, 0, 'ENTROU GRAVA_LOG_SISTEMA', null);
+
+--vOCORRENCIA := OBTER_OCORRENCIA_LOG(pDataAlteracao);
+vOCORRENCIA := 0;
+  -- Recupera a estação da rede que o comando está sendo executado
+  BEGIN
+  SELECT max(OCORRENCIA)
+    INTO vOCORRENCIA
+    FROM RHPARM_LOG_SIST
+   WHERE MODULO = 'arte'
+     AND DATA_ALTERACAO = pDataAlteracao
+     AND OBJETO = pObjeto
+     AND USUARIO = 'IMPORT_PS'
+     AND OPERACAO = pOperacao
+     ;
+  EXCEPTION
+  WHEN OTHERS THEN
+  vOCORRENCIA := 0;
+  END;
+
+IF vOCORRENCIA IS NULL THEN
+   vOCORRENCIA := 1;
+ELSE
+   vOCORRENCIA := vOCORRENCIA + 1;
+END IF;
+
+/*
+  -- Recupera a estação da rede que o comando está sendo executado
+  BEGIN
+  SELECT TERMINAL
+    INTO vTERMINAL_ESTACAO_REDE
+    FROM v$session
+   WHERE AUDSID = SYS_CONTEXT('USERENV','SESSIONID');
+  EXCEPTION
+  WHEN OTHERS THEN
+  vTERMINAL_ESTACAO_REDE := NULL;
+  END;
+*/
+
+IF pObjeto = OBJETO_PESSOA THEN
+   vKEY_STR := 'codigo_empresa: ' || pReg.CODIGO_EMPRESA ||
+               'codigo: ' || pReg.CODIGO_PESSOA_TITULAR;
+ELSIF pObjeto = OBJETO_PESSOA_PESSOA THEN
+   vKEY_STR := 'codigo_empresa: ' || pReg.CODIGO_EMPRESA || CHR(10) ||
+               'codigo_pessoa: ' || pReg.CODIGO_PESSOA_TITULAR || CHR(10) ||
+               'tp_relacionamento: ' || pReg.TIPO_RELACIONAMENTO || CHR(10) ||
+               'cod_pessoa_relac: ' || pReg.CODIGO_PESSOA_BENEFICIARIO || CHR(10) ||
+               'ocorrencia: ' || pReg.OCORRENCIA;
+END IF;
+
+BEGIN
+insert into RHPARM_LOG_SIST (MODULO, DATA_ALTERACAO, OBJETO, USUARIO, OPERACAO, KEY_STR, REGISTRO, ESTACAO_REDE, OCORRENCIA, DATA_FIM_OPER, ID_ESCALONA)
+values(
+       'arte',
+       pDataAlteracao,
+       pObjeto,
+       'IMPORT_PS',
+       pOperacao,
+       'IMPORTACAO_PLANO_SAUDE ' || vKEY_STR,
+       vKEY_STR,
+       vTERMINAL_ESTACAO_REDE,
+       vOCORRENCIA,
+       null,
+       null
+);
+
+EXCEPTION
+WHEN DUP_VAL_ON_INDEX THEN
+BEGIN
+vOCORRENCIA := vOCORRENCIA + 1;
+insert into RHPARM_LOG_SIST (MODULO, DATA_ALTERACAO, OBJETO, USUARIO, OPERACAO, KEY_STR, REGISTRO, ESTACAO_REDE, OCORRENCIA, DATA_FIM_OPER, ID_ESCALONA)
+values(
+       'arte',
+       pDataAlteracao + (1/(24*60*60)),
+       pObjeto,
+       'IMPORT_PS',
+       pOperacao,
+       'IMPORTACAO_PLANO_SAUDE ' || vKEY_STR,
+       vKEY_STR,
+       vTERMINAL_ESTACAO_REDE,
+       vOCORRENCIA,
+       null,
+       null
+);
+EXCEPTION
+WHEN OTHERS THEN
+   GRAVA_LOG(TIPO_LOG_ERRO, 0, 'ERRO AO TENTAR REGISTRAR LOG DO SISTEMA APOS NOVA TENTATIVA', 'pDataAlteracao: ' || TO_CHAR(pDataAlteracao, 'DD/MM/YYYY HH24:MI:SS') ||
+                                                                          'pObjeto: ' || pObjeto ||
+                                                                          'pUsuario: ' || pUsuario ||
+                                                                          'pOperacao: ' || pOperacao ||
+                                                                          'vOCORRENCIA: ' || vOCORRENCIA ||
+                                                                          'vKEY_STR: ' || vKEY_STR ||
+                                                                          'vTERMINAL_ESTACAO_REDE: ' || vTERMINAL_ESTACAO_REDE ||
+                                                                          'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+END;
+
+WHEN OTHERS THEN
+   GRAVA_LOG(TIPO_LOG_ERRO, 0, 'ERRO AO TENTAR REGISTRAR LOG DO SISTEMA', 'pDataAlteracao: ' || TO_CHAR(pDataAlteracao, 'DD/MM/YYYY HH24:MI:SS') ||
+                                                                          'pObjeto: ' || pObjeto ||
+                                                                          'pUsuario: ' || pUsuario ||
+                                                                          'pOperacao: ' || pOperacao ||
+                                                                          'vOCORRENCIA: ' || vOCORRENCIA ||
+                                                                          'vKEY_STR: ' || vKEY_STR ||
+                                                                          'vTERMINAL_ESTACAO_REDE: ' || vTERMINAL_ESTACAO_REDE ||
+                                                                          'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+END;
+
+GRAVA_LOG(TIPO_LOG_INFO, 0, 'SAIU GRAVA_LOG_SISTEMA',null);
+END;
+
+PROCEDURE ATRIBUI_DADO(indice IN NUMBER, valorTexto IN VARCHAR2,valorNumero IN NUMBER, valorData IN DATE) AS
+
+BEGIN
+    --dbms_output.put_line(indice || valorTexto || valorNumero || valorData);
+    CASE
+    WHEN indice = 1  THEN REGISTRO_BENEFICIARIO.TIPO_OPERACAO := valorTexto;
+    WHEN indice = 2  THEN REGISTRO_BENEFICIARIO.CODIGO_EMPRESA := valorTexto;
+    WHEN indice = 3  THEN REGISTRO_BENEFICIARIO.CODIGO_CONTRATO := valorTexto;
+    WHEN indice = 4  THEN REGISTRO_BENEFICIARIO.CPF := valorTexto;
+    WHEN indice = 5  THEN REGISTRO_BENEFICIARIO.NOME := valorTexto;
+    WHEN indice = 6  THEN REGISTRO_BENEFICIARIO.DATA_NASCIMENTO := valorData;
+    WHEN indice = 7  THEN REGISTRO_BENEFICIARIO.CODIGO_SEXO := valorTexto;
+    WHEN indice = 8  THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := valorTexto;
+    WHEN indice = 9  THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := valorTexto;
+    WHEN indice = 10 THEN REGISTRO_BENEFICIARIO.IDENTIDADE := valorTexto;
+    WHEN indice = 11 THEN REGISTRO_BENEFICIARIO.NOME_DA_MAE := valorTexto;
+    WHEN indice = 12 THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_LOGRADOURO := valorTexto;
+    WHEN indice = 13 THEN REGISTRO_BENEFICIARIO.ENDERECO := valorTexto;
+    WHEN indice = 14 THEN REGISTRO_BENEFICIARIO.NUMERO := valorTexto;
+    WHEN indice = 15 THEN REGISTRO_BENEFICIARIO.COMPLEMENTO := valorTexto;
+    WHEN indice = 16 THEN REGISTRO_BENEFICIARIO.BAIRRO := valorData;
+    WHEN indice = 17 THEN REGISTRO_BENEFICIARIO.CODIGO_MUNICIPIO := valorTexto;
+    WHEN indice = 18 THEN REGISTRO_BENEFICIARIO.UF := valorTexto;
+    WHEN indice = 19 THEN REGISTRO_BENEFICIARIO.CEP := valorTexto;
+    WHEN indice = 20 THEN REGISTRO_BENEFICIARIO.TELEFONE_FIXO := valorTexto;
+    WHEN indice = 21 THEN REGISTRO_BENEFICIARIO.TELEFONE_CELULAR := valorTexto;
+    WHEN indice = 22 THEN REGISTRO_BENEFICIARIO.DATA_CADASTRAMENTO := valorData;
+    END CASE;
+
+END;
+
+
+PROCEDURE IMPRIME_CAMPOS(I_S INTERFACE_SERVIDOR) AS
+BEGIN
+  dbms_output.put_line('*** IMPRESSSÃO CAMPOS ***');
+  dbms_output.put_line(RPAD('CAMPO', 30, ' ') || RPAD('VALOR', 1000, ' '));
+
+  FOR i in 1..I_S.COUNT() LOOP
+      dbms_output.put_line(RPAD(I_S(i).CAMPO, 30, ' ') || RPAD(I_S(i).VALOR, 1000, ' '));
+  END LOOP;
+
+END;
+
+PROCEDURE IMPRIME_REGISTRO(RG REGISTRO) AS
+BEGIN
+  dbms_output.put_line('*** IMPRESSSÃO REGISTRO ***');
+    dbms_output.put_line(RG.TIPO_OPERACAO);
+    dbms_output.put_line(RG.CODIGO_EMPRESA);
+    dbms_output.put_line(RG.CODIGO_CONTRATO);
+    dbms_output.put_line(RG.CPF);
+    dbms_output.put_line(RG.NOME);
+    dbms_output.put_line(RG.DATA_NASCIMENTO);
+    dbms_output.put_line(RG.CODIGO_SEXO);
+    dbms_output.put_line(RG.CODIGO_TIPO_RELACIONAMENTO);
+    dbms_output.put_line(RG.CODIGO_ESTADO_CIVIL);
+    dbms_output.put_line(RG.IDENTIDADE);
+    dbms_output.put_line(RG.NOME_DA_MAE);
+    dbms_output.put_line(RG.CODIGO_TIPO_LOGRADOURO);
+    dbms_output.put_line(RG.ENDERECO);
+    dbms_output.put_line(RG.NUMERO);
+    dbms_output.put_line(RG.COMPLEMENTO);
+    dbms_output.put_line(RG.BAIRRO);
+    dbms_output.put_line(RG.CODIGO_MUNICIPIO);
+    dbms_output.put_line(RG.UF);
+    dbms_output.put_line(RG.CEP);
+    dbms_output.put_line(RG.TELEFONE_FIXO);
+    dbms_output.put_line(RG.TELEFONE_CELULAR);
+    dbms_output.put_line(RG.DATA_CADASTRAMENTO);
+
+END;
+
+begin
+
+    REG := LISTA_CAMPOS_SERVIDOR();
+    vLISTA_LOG := LISTA_LOG();
+    REG_LOG := LOG_PROCESSAMENTO(null, null,null,null);
+    vRETORNO := RETORNO_PROCESSAMENTO(null,null,null);
+
+    vCONTADOR := 1;
+    vCONTEUDO := LinhaTexto;
+    vTAM_LINHA := LENGTH(vCONTEUDO);
+    --dbms_output.put_line(LinhaTexto);
+
+
+        FOR i in 1..vTAM_LINHA LOOP
+        vCARACTERE := SUBSTR(vCONTEUDO,i,1);
+        IF vCARACTERE = ';' THEN
+                      REG.EXTEND(1);
+           REG(vCONTADOR).CONTEUDO := vCAMPO;
+           vCAMPO := '';
+           vCONTADOR := vCONTADOR + 1;
+        ELSE
+            vCAMPO := vCAMPO || vCARACTERE;
+        END IF;
+
+    END LOOP;
+        REG.EXTEND(1);
+    REG(vCONTADOR).CONTEUDO := vCAMPO;
+    vCAMPO := '';
+
+
+
+     vCONTADOR := 1;
+     I_S := INTERFACE_SERVIDOR();
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'TIPO_OPERACAO';             I_S(vCONTADOR).TAMANHO_IS := 1;  I_S(vCONTADOR).TAMANHO := 1;  I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_EMPRESA';            I_S(vCONTADOR).TAMANHO_IS := 4;  I_S(vCONTADOR).TAMANHO := 4;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_CONTRATO';           I_S(vCONTADOR).TAMANHO_IS := 15; I_S(vCONTADOR).TAMANHO := 15; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CPF';                       I_S(vCONTADOR).TAMANHO_IS := 11; I_S(vCONTADOR).TAMANHO := 11; I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'NOME';                      I_S(vCONTADOR).TAMANHO_IS := 60; I_S(vCONTADOR).TAMANHO := 60; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'DATA_NASCIMENTO';           I_S(vCONTADOR).TAMANHO_IS := 8;  I_S(vCONTADOR).TAMANHO := 8;  I_S(vCONTADOR).TIPO_IS := TIPO_DATA;         I_S(vCONTADOR).TIPO := TIPO_DATA;         I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_SEXO';               I_S(vCONTADOR).TAMANHO_IS := 4;  I_S(vCONTADOR).TAMANHO := 4;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_TIPO_RELACIONAMENTO';I_S(vCONTADOR).TAMANHO_IS := 4;  I_S(vCONTADOR).TAMANHO := 4;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := SIM; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_ESTADO_CIVIL';       I_S(vCONTADOR).TAMANHO_IS := 4;  I_S(vCONTADOR).TAMANHO := 4;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'IDENTIDADE';                I_S(vCONTADOR).TAMANHO_IS := 20; I_S(vCONTADOR).TAMANHO := 20; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := SIM; vCONTADOR := vCONTADOR + 1;
+
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'NOME_DA_MAE';               I_S(vCONTADOR).TAMANHO_IS := 60; I_S(vCONTADOR).TAMANHO := 60; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_TIPO_LOGRADOURO';    I_S(vCONTADOR).TAMANHO_IS := 4;  I_S(vCONTADOR).TAMANHO := 4;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'ENDERECO';                  I_S(vCONTADOR).TAMANHO_IS := 40; I_S(vCONTADOR).TAMANHO := 40; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'NUMERO';                    I_S(vCONTADOR).TAMANHO_IS := 10; I_S(vCONTADOR).TAMANHO := 10; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'COMPLEMENTO';               I_S(vCONTADOR).TAMANHO_IS := 40; I_S(vCONTADOR).TAMANHO := 40; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := SIM; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'BAIRRO';                    I_S(vCONTADOR).TAMANHO_IS := 40; I_S(vCONTADOR).TAMANHO := 40; I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CODIGO_MUNICIPIO';          I_S(vCONTADOR).TAMANHO_IS := 7;  I_S(vCONTADOR).TAMANHO := 7;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'UF';                        I_S(vCONTADOR).TAMANHO_IS := 2;  I_S(vCONTADOR).TAMANHO := 2;  I_S(vCONTADOR).TIPO_IS := TIPO_ALFANUMERICO; I_S(vCONTADOR).TIPO := TIPO_ALFANUMERICO; I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'CEP';                       I_S(vCONTADOR).TAMANHO_IS := 8;  I_S(vCONTADOR).TAMANHO := 8;  I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'TELEFONE_FIXO';             I_S(vCONTADOR).TAMANHO_IS := 10; I_S(vCONTADOR).TAMANHO := 10; I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := SIM; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'TELEFONE_CELULAR';          I_S(vCONTADOR).TAMANHO_IS := 11; I_S(vCONTADOR).TAMANHO := 11; I_S(vCONTADOR).TIPO_IS := TIPO_NUMERICO;     I_S(vCONTADOR).TIPO := TIPO_NUMERICO;     I_S(vCONTADOR).NULO := SIM; vCONTADOR := vCONTADOR + 1;
+     I_S.EXTEND(1); I_S(vCONTADOR).CAMPO := 'DATA_CADASTRAMENTO';        I_S(vCONTADOR).TAMANHO_IS := 14; I_S(vCONTADOR).TAMANHO := 14; I_S(vCONTADOR).TIPO_IS := TIPO_DATA_HORA;    I_S(vCONTADOR).TIPO := TIPO_DATA_HORA;    I_S(vCONTADOR).NULO := NAO; vCONTADOR := vCONTADOR + 1;
+
+   vTAM_REGISTRO := REG.COUNT();
+   vTAM_INTERFACE := I_S.COUNT();
+
+/*
+   IF (vTAM_LINHA <> TAMANHO_MAXIMO_LINHA) THEN
+      GRAVA_LOG(Numero_linha, 'TAMANHO DA LINHA INVÁLIDO' || 'VALOR_ESPERADO: ' || TAMANHO_MAXIMO_LINHA || ' VALOR_OBTIDO: ' || vTAM_LINHA);
+   END IF;
+*/
+
+   IF (vTAM_INTERFACE <> vTAM_REGISTRO) THEN
+      GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'QUANTIDADE DE CAMPOS INVÁLIDA', 'VALOR_ESPERADO: ' || vTAM_INTERFACE || ' VALOR_OBTIDO: ' || vTAM_REGISTRO);
+   END IF;
+
+
+   IF (vTAM_REGISTRO >= vTAM_INTERFACE) THEN
+     FOR i in 1..vTAM_INTERFACE LOOP
+
+         I_S(i).VALOR := REG(i).CONTEUDO;
+     END LOOP;
+   ELSE
+     FOR i in 1..vTAM_REGISTRO LOOP
+
+         I_S(i).VALOR := REG(i).CONTEUDO;
+     END LOOP;
+   END IF;
+
+   --IMPRIME_CAMPOS(I_S);
+
+FOR i in 1..vTAM_INTERFACE LOOP
+
+      V_TEXTO := NULL;
+      V_NUMERICO := NULL;
+      V_DATA := NULL;
+
+      --V_CONTEUDO := I_S(i).VALOR;
+      V_CONTEUDO := TRIM(I_S(i).VALOR);
+      vCAMPO_PODE_SER_NULO := I_S(i).NULO = 1;
+      vTAM_CAMPO := LENGTH(TRIM(I_S(i).VALOR));
+
+      IF (vTAM_CAMPO IS NULL AND NOT vCAMPO_PODE_SER_NULO) THEN
+         GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'CAMPO NULO', I_S(i).CAMPO);
+      ELSIF (vTAM_CAMPO IS NOT NULL) THEN
+
+          IF (vTAM_CAMPO > (I_S(i).TAMANHO_IS)) THEN
+
+          GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TAMANHO DE CAMPO INVÁLIDO', I_S(i).CAMPO  || ' VALOR_ESPERADO =  ' || I_S(i).TAMANHO_IS || ' VALOR_OBTIDO = ' || vTAM_CAMPO);
+
+          END IF;
+
+          IF (I_S(i).TIPO_IS = TIPO_NUMERICO) THEN
+
+             BEGIN
+             V_NUMERICO := TO_NUMBER(V_CONTEUDO);
+             V_TEXTO := V_CONTEUDO;
+
+             IF (I_S(i).TAMANHO_IS <> I_S(i).TAMANHO) THEN
+                V_TEXTO := LPAD(V_NUMERICO, I_S(i).TAMANHO, '0');
+                /*
+                dbms_output.put_line('V_CONTEUDO = ' || V_CONTEUDO);
+                dbms_output.put_line('V_NUMERICO = ' || V_NUMERICO);
+                dbms_output.put_line('V_TEXTO    = ' || V_TEXTO);
+                */
+             END IF;
+             --dbms_output.put_line('V_TEXTO    = ' || V_TEXTO);
+             IF (I_S(i).TIPO_IS <> I_S(i).TIPO) THEN
+                V_TEXTO := SUBSTR(V_TEXTO, 1, LENGTH(V_TEXTO)-2) || '.' || SUBSTR(V_TEXTO, LENGTH(V_TEXTO)-1);
+                IF I_S(i).TIPO = TIPO_VALOR THEN
+                   V_NUMERICO := TO_NUMBER(V_TEXTO);
+                   V_TEXTO := LPAD(V_NUMERICO, I_S(i).TAMANHO, '0');
+                END IF;
+                /*
+                dbms_output.put_line('@@@@@@@@');
+                dbms_output.put_line('V_CONTEUDO = ' || V_CONTEUDO);
+                dbms_output.put_line('V_NUMERICO = ' || V_NUMERICO);
+                dbms_output.put_line('V_TEXTO    = ' || V_TEXTO);
+                dbms_output.put_line('@@@@@@@@');
+                */
+             END IF;
+
+             ATRIBUI_DADO(i,V_TEXTO, V_NUMERICO, V_DATA);
+             EXCEPTION
+             WHEN OTHERS THEN
+
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'NÚMERO INVÁLIDO', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+
+             END;
+          END IF;
+
+          IF (I_S(i).TIPO_IS = TIPO_DATA) THEN
+
+             BEGIN
+             V_DATA := TO_DATE(V_CONTEUDO, FORMATO_DATA);
+             ATRIBUI_DADO(i,V_TEXTO, V_NUMERICO, V_DATA);
+             EXCEPTION
+             WHEN OTHERS THEN
+
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'DATA INVÁLIDA', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+
+             END;
+
+          END IF;
+
+          IF (I_S(i).TIPO_IS = TIPO_DATA_HORA) THEN
+
+             BEGIN
+             V_DATA := TO_DATE(V_CONTEUDO, FORMATO_DATA_HORA);
+             ATRIBUI_DADO(i,V_TEXTO, V_NUMERICO, V_DATA);
+             EXCEPTION
+             WHEN OTHERS THEN
+
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'DATA INVÁLIDA', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+
+             END;
+
+         END IF;
+         IF (I_S(i).TIPO_IS = TIPO_ALFANUMERICO) THEN
+
+             BEGIN
+             V_TEXTO := V_CONTEUDO;
+
+             IF (I_S(i).TAMANHO_IS > I_S(i).TAMANHO) THEN
+                V_TEXTO := SUBSTR(V_TEXTO, ((LENGTH(V_TEXTO) - I_S(i).TAMANHO)+1));
+                /*
+                dbms_output.put_line('V_CONTEUDO = ' || V_CONTEUDO);
+                dbms_output.put_line('V_NUMERICO = ' || V_NUMERICO);
+                dbms_output.put_line('V_TEXTO    = ' || V_TEXTO);
+                */
+             END IF;
+             --dbms_output.put_line('INICIO - @@@@@@@@@@@@@V_CONTEUDO = ' || V_CONTEUDO);
+             IF (I_S(i).TIPO_IS <> I_S(i).TIPO) THEN
+                IF I_S(i).TIPO = TIPO_NUMERICO THEN
+
+                V_TEXTO := LPAD(V_TEXTO, I_S(i).TAMANHO, '0');
+                END IF;
+
+                --dbms_output.put_line('V_CONTEUDO = ' || V_CONTEUDO);
+                --dbms_output.put_line('V_NUMERICO = ' || V_NUMERICO);
+                --dbms_output.put_line('V_TEXTO    = ' || V_TEXTO);
+
+             END IF;
+             --dbms_output.put_line('FIM - @@@@@@@@@@@@@V_CONTEUDO = ' || V_CONTEUDO);
+             ATRIBUI_DADO(i,V_TEXTO, V_NUMERICO, V_DATA);
+             EXCEPTION
+             WHEN OTHERS THEN
+
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TEXTO INVÁLIDO', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+
+             END;
+
+         END IF;
+
+         IF (I_S(i).TIPO_IS = TIPO_SIM_NAO) THEN
+
+             BEGIN
+               IF V_CONTEUDO IN ('S','N') THEN
+                  V_TEXTO := V_CONTEUDO;
+                       ATRIBUI_DADO(i,V_TEXTO, V_NUMERICO, V_DATA);
+               ELSE
+                   GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TEXTO INVÁLIDO', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+               END IF;
+             EXCEPTION
+             WHEN OTHERS THEN
+
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TEXTO INVÁLIDO', I_S(i).CAMPO || ' VALOR: ' || '|' || V_CONTEUDO  || '|');
+
+             END;
+
+         END IF;
+
+      END IF;
+    END LOOP;
+    --IMPRIME_CAMPOS(I_S);
+    --IMPRIME_REGISTRO(REGISTRO_MOVIMENTO);
+
+  -- Lista de valores válidos esperados na Interface de Software (IS)
+  -- Tipo de Relacionamento
+  LISTA_TIPO_RELACI_IS := LISTA('0001','0002','0003','0004','0005','0006',
+                                '0015','0016','0018','0028','0029','0030');
+
+  -- Estado Civil
+  LISTA_ESTADO_CIVIL_IS := LISTA('0001','0002','0003','0004','0005','0006','0007','0008');
+
+  -- Tipo de Logadouro
+  LISTA_TIPO_LOGRADOURO_IS := LISTA('0001','0002','0003','0004','0005','0006','0007',
+                                    '0008','0009','0011','0012','0013','0014','0015');
+
+  -- Lista de valores válidos nas bases de dados da Pensão, Ativos e Aposentados
+  -- Pensão      CODIGO_EMPRESA = 0011
+  -- Ativos      CODIGO_EMPRESA = 0001
+  -- Aposentados CODIGO_EMPRESA = 1700
+  IF REGISTRO_BENEFICIARIO.CODIGO_EMPRESA = '0011' THEN
+    LISTA_TIPO_RELACI_VALIDO := LISTA('0016','0020','0021','0022','0023','0024','0025','0026','0031');
+
+    LISTA_ESTADO_CIVIL_VALIDO := LISTA('0001','0002','0003','0004','0005','0006','0007','0008');
+
+    LISTA_TIPO_LOGRADOURO_VALIDO := LISTA('0001','0002','0003','0004','0005','0006','0007',
+                                          '0008','0009','0011','0012','0013','0014','0015');
+
+    LISTA_TIPO_BENEFICIO := LISTA('0022', '0025', '0026');
+  ELSE
+    LISTA_TIPO_RELACI_VALIDO := LISTA('0001','0002','0003','0004','0005','0006',
+                                    '0015','0016','0018','0028','0029','0030');
+
+    LISTA_ESTADO_CIVIL_VALIDO := LISTA('0001','0002','0003','0004','0005','0006','0007','0008');
+
+    LISTA_TIPO_LOGRADOURO_VALIDO := LISTA('0001','0002','0003','0004','0005','0006','0007',
+                                        '0008','0009','0011','0012','0013','0014','0015');
+
+    LISTA_TIPO_BENEFICIO := LISTA('0003','0004', '0005', '0006');
+  END IF;
+
+
+
+    -- Valores Válidos
+    -- Verifica o tipo de operação
+    -- No caso de beneficiário são permitidas as operações de inclusão (I) e alteração (A)
+    IF REGISTRO_BENEFICIARIO.TIPO_OPERACAO NOT IN ('I','A') THEN
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO_OPERACAO_INVALIDO', null);
+    END IF;
+
+BEGIN -- INICIO VALIDACOES REGRAS
+
+    -- CPF deve ser válido
+    vCPF_VALIDO:= VALIDA_CPF_CNPJ(REGISTRO_BENEFICIARIO.CPF);
+
+    IF NOT vCPF_VALIDO THEN
+       --raise_application_error (-20003,'CPF INVALIDO - ' || REGISTRO_BENEFICIARIO.CPF);
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'CPF INVALIDO', REGISTRO_BENEFICIARIO.CPF);
+    END IF;
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_SEXO NOT IN ('0001','0002') THEN
+       --raise_application_error (-20003,'SEXO INVALIDO - ' || REGISTRO_BENEFICIARIO.CODIGO_SEXO);
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'SEXO INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_SEXO || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+    END IF;
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO NOT MEMBER (LISTA_TIPO_RELACI_IS) THEN
+       --raise_application_error (-20003,'TIPO DE RELACIONAMENTO INVALIDO - ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO);
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO DE RELACIONAMENTO INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+       REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0002';
+    END IF;
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_EMPRESA = '0011' THEN
+       CASE WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0001' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0020';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0002' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0021';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0003' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0022';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0004' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0023';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0005' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0025';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0006' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0016';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0015' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0031';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0016' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0026';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0018' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0016';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0028' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0016';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0029' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0016';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO = '0030' THEN REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO := '0016';
+       ELSE
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO DE RELACIONAMENTO INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+              /*
+              0020"0001" - ESPOSO (A)
+              0021"0002" - FILHO (A)
+              0022"0003" - COMPANHEIRO (A)
+              0023"0004" - PAI
+              0025"0005" - MAE
+              0016"0006" - TUTELADO (A)
+              0031"0015" - MENOR SOB GUARDA
+              0026"0016" - IRMÃO (A)
+              0016"0018" - PADRASTO
+              0016"0028" - MADRASTA
+              0016"0029" - ENTEADO (A)
+              0016"0030" - CURATELADO (A)
+              */
+     END CASE;
+    END IF;
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL NOT MEMBER (LISTA_ESTADO_CIVIL_IS) THEN
+       --raise_application_error (-20003,'ESTADO CIVIL INVALIDO - ' || REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL);
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ESTADO CIVIL INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+    END IF;
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_EMPRESA = '0011' THEN
+       CASE WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0001' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'C   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0002' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'S   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0003' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'V   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0004' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'D   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0005' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'D   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0006' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'J   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0007' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'O   ';
+            WHEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL = '0008' THEN REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL := 'U   ';
+       ELSE
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ESTADO CIVIL INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+              /*
+              'C   '"0001" - CASADO
+              'S   '"0002" - SOLTEIRO
+              'V   '"0003" - VIUVO
+              'D   '"0004" - DESQUITADO
+              'D   '"0005" - DIVORCIADO
+              'J   '"0006" - SEPARAÇÃO JUDICIAL
+              'O   '"0007" - OUTROS
+              'U   '"0008" - UNIÃO ESTÁVEL
+              */
+     END CASE;
+    END IF;
+
+
+    IF REGISTRO_BENEFICIARIO.CODIGO_TIPO_LOGRADOURO NOT MEMBER (LISTA_TIPO_LOGRADOURO_IS) THEN
+       --raise_application_error (-20003,'TIPO DE LOGRADOURO INVALIDO - ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_LOGRADOURO);
+       GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO DE LOGRADOURO INVALIDO', REGISTRO_BENEFICIARIO.CODIGO_TIPO_LOGRADOURO || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+       REGISTRO_BENEFICIARIO.CODIGO_TIPO_LOGRADOURO := '0001';
+    END IF;
+
+    -- Pessoa do Titular deve existir na base de dados de pessoa
+    BEGIN
+      select P.CODIGO
+        into vCODIGO_PESSOA_TITULAR
+        from RHPESS_PESSOA P, RHPESS_CONTRATO C
+       where P.CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+         and P.CODIGO_EMPRESA = C.CODIGO_EMPRESA
+         and P.CODIGO = C.CODIGO_PESSOA
+         AND P.DT_TERMINO IS NULL
+         and C.TIPO_CONTRATO = vTIPO_CONTRATO
+         and C.CODIGO = REGISTRO_BENEFICIARIO.CODIGO_CONTRATO
+         and C.ANO_MES_REFERENCIA = (select max(ANO_MES_REFERENCIA)
+                                       from RHPESS_CONTRATO AUX
+                                      where AUX.CODIGO_EMPRESA = C.CODIGO_EMPRESA
+                                        and AUX.TIPO_CONTRATO = C.TIPO_CONTRATO
+                                        and AUX.CODIGO = C.CODIGO
+                                        and AUX.ANO_MES_REFERENCIA <= sysdate
+                                    )
+         ;
+    EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+         --raise_application_error (-20003,'PESSOA TITULAR NAO ENCONTRADA PARA O CODIGO DE CONTRATO INFORMADO : ' || REGISTRO_BENEFICIARIO.CODIGO_CONTRATO);
+         GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'PESSOA TITULAR NAO ENCONTRADA PARA O CODIGO DE CONTRATO INFORMADO', REGISTRO_BENEFICIARIO.CODIGO_CONTRATO);
+    WHEN OTHERS THEN
+         NULL;
+    END;
+
+    -- Verifica se pessoa já existe
+    BEGIN
+      select CODIGO, DATA_NASCIMENTO, trunc(months_between(sysdate, DATA_NASCIMENTO)/12),
+             NOME, DATA_NASCIMENTO, SEXO,
+             ESTADO_CIVIL, IDENTIDADE, C_LIVRE_DESCR12
+        into vCODIGO_PESSOA, vDATA_NASCIMENTO, vIDADE,
+             vPESSOA_NOME, vPESSOA_DATA_NASCIMENTO, vPESSOA_SEXO,
+             vPESSOA_ESTADO_CIVIL, vPESSOA_IDENTIDADE, vPESSOA_NOME_DA_MAE
+        from RHPESS_PESSOA P
+       where P.CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+         and P.CPF = REGISTRO_BENEFICIARIO.CPF
+         AND P.DT_TERMINO IS NULL;
+         --dbms_output.put_line('TESTE 1 - ' || REGISTRO_BENEFICIARIO.CPF || vCODIGO_PESSOA);
+    EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+         vCODIGO_PESSOA := NULL;
+         vDATA_NASCIMENTO := NULL;
+         vIDADE := NULL;
+         vPESSOA_NOME := NULL;
+         vPESSOA_DATA_NASCIMENTO := NULL;
+         vPESSOA_SEXO := NULL;
+         vPESSOA_ESTADO_CIVIL := NULL;
+         vPESSOA_IDENTIDADE := NULL;
+         vPESSOA_NOME_DA_MAE := NULL;
+    WHEN TOO_MANY_ROWS THEN
+        BEGIN
+              select CODIGO, DATA_NASCIMENTO, trunc(months_between(sysdate, DATA_NASCIMENTO)/12),
+                     NOME, DATA_NASCIMENTO, SEXO,
+                     ESTADO_CIVIL, IDENTIDADE, C_LIVRE_DESCR12
+                into vCODIGO_PESSOA, vDATA_NASCIMENTO, vIDADE,
+                     vPESSOA_NOME, vPESSOA_DATA_NASCIMENTO, vPESSOA_SEXO,
+                     vPESSOA_ESTADO_CIVIL, vPESSOA_IDENTIDADE, vPESSOA_NOME_DA_MAE
+                from RHPESS_PESSOA P
+               where P.CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                 and P.CPF = REGISTRO_BENEFICIARIO.CPF
+                 and P.DATA_NASCIMENTO = REGISTRO_BENEFICIARIO.DATA_NASCIMENTO
+                 AND P.DT_TERMINO IS NULL;
+                 --dbms_output.put_line('TESTE 2 - ' || REGISTRO_BENEFICIARIO.CPF || vCODIGO_PESSOA);
+        EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+             vCODIGO_PESSOA := NULL;
+             vDATA_NASCIMENTO := NULL;
+             vIDADE := NULL;
+             vPESSOA_NOME := NULL;
+             vPESSOA_DATA_NASCIMENTO := NULL;
+             vPESSOA_SEXO := NULL;
+             vPESSOA_ESTADO_CIVIL := NULL;
+             vPESSOA_IDENTIDADE := NULL;
+             vPESSOA_NOME_DA_MAE := NULL;
+        WHEN TOO_MANY_ROWS THEN
+            BEGIN
+                  select CODIGO, DATA_NASCIMENTO, trunc(months_between(sysdate, DATA_NASCIMENTO)/12),
+                         NOME, DATA_NASCIMENTO, SEXO,
+                         ESTADO_CIVIL, IDENTIDADE, C_LIVRE_DESCR12
+                    into vCODIGO_PESSOA, vDATA_NASCIMENTO, vIDADE,
+                         vPESSOA_NOME, vPESSOA_DATA_NASCIMENTO, vPESSOA_SEXO,
+                         vPESSOA_ESTADO_CIVIL, vPESSOA_IDENTIDADE, vPESSOA_NOME_DA_MAE
+                    from RHPESS_PESSOA P
+                   where P.CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                     and P.CPF = REGISTRO_BENEFICIARIO.CPF
+                     and P.DATA_NASCIMENTO = REGISTRO_BENEFICIARIO.DATA_NASCIMENTO
+                     AND P.DT_TERMINO IS NULL
+                     and exists (
+                  select *
+                    from RHPESS_RL_PESS_PES PP
+                   where PP.COD_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                     and PP.COD_PESSOA_RELAC in (select CODIGO from RHPESS_PESSOA
+                                                  where CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                                                    and CPF = REGISTRO_BENEFICIARIO.CPF
+                                                    AND DT_TERMINO IS NULL)
+                     and PP.COD_PESSOA = (
+                                         select CODIGO_PESSOA
+                                           from RHPESS_CONTRATO A
+                                          where A.CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                                            and A.TIPO_CONTRATO = vTIPO_CONTRATO
+                                            and A.CODIGO = REGISTRO_BENEFICIARIO.CODIGO_CONTRATO
+                                            and A.ANO_MES_REFERENCIA = (select max(ANO_MES_REFERENCIA)
+                                                                          from RHPESS_CONTRATO B
+                                                                         where B.CODIGO_EMPRESA = A.CODIGO_EMPRESA
+                                                                           and B.TIPO_CONTRATO = A.TIPO_CONTRATO
+                                                                           and B.CODIGO = A.CODIGO
+                                                                        )
+                                         )
+                     and TP_RELACIONAMENTO member (LISTA_TIPO_RELACI_VALIDO)
+                     );
+                                               --dbms_output.put_line('TESTE 3 - ' || REGISTRO_BENEFICIARIO.CPF || vCODIGO_PESSOA);
+                 --raise_application_error (-20003,'DEPENDENTE - ENCONTRADO MAIS DE UM REGISTRO DE PESSOA PARA O CPF INFORMADO: ' || REGISTRO_BENEFICIARIO.CPF);
+            EXCEPTION
+            WHEN OTHERS THEN
+                 NULL;
+            END;
+        WHEN OTHERS THEN
+             NULL;
+        END;
+    WHEN OTHERS THEN
+         NULL;
+    END;
+
+    --dbms_output.put_line('TESTE 4 - ' || 'CPF : ' || REGISTRO_BENEFICIARIO.CPF || 'PESSOA_TITULAR: ' || vCODIGO_PESSOA_TITULAR || 'PESSOA DEPENDENTE:' || vCODIGO_PESSOA);
+    IF vCODIGO_PESSOA_TITULAR IS NOT NULL AND vCODIGO_PESSOA IS NOT NULL THEN
+        BEGIN
+             select TP_RELACIONAMENTO
+               into vTIPO_RELACIONAMENTO
+               from RHPESS_RL_PESS_PES
+              where COD_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                and COD_PESSOA = vCODIGO_PESSOA_TITULAR
+                and COD_PESSOA_RELAC = vCODIGO_PESSOA
+                and TP_RELACIONAMENTO member (LISTA_TIPO_RELACI_VALIDO);
+
+
+
+
+        EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+             vTIPO_RELACIONAMENTO := NULL;
+        WHEN TOO_MANY_ROWS THEN
+             --raise_application_error (-20003,'ENCONTRADO MAIS DE UM REGISTRO DE RELACIONAMENTO PESSOA/PESSOA PARA O TITULAR E BENEFICIARIO INFORMADOS.');
+             GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ENCONTRADO MAIS DE UM REGISTRO DE RELACIONAMENTO PESSOA/PESSOA PARA O TITULAR E BENEFICIARIO INFORMADOS.', vCODIGO_PESSOA_TITULAR || vCODIGO_PESSOA || ' CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+        WHEN OTHERS THEN
+             NULL;
+        END;
+    END IF;
+
+    EXCEPTION
+    WHEN OTHERS THEN
+         --dbms_output.put_line('ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+         --GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM, null);
+
+         vRETORNO.CODIGO_RETORNO := 99;
+         vRETORNO.DESCRICAO_RETORNO := 'PROCESSAMENTO COM ERRO';
+         vRETORNO.LISTA_LOG_RETORNO := vLISTA_LOG;
+    END;
+
+    BEGIN
+    IF REGISTRO_BENEFICIARIO.TIPO_OPERACAO = 'I' and vCODIGO_PESSOA_BENEFICIARIO IS NULL THEN
+       -- Se pessoa ainda não estiver cadastrada na base de dados
+       -- registra-se o cadastro da pessoa e o respectivo tipo de relacionamento
+       vCODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA;
+
+       IF vCODIGO_PESSOA_BENEFICIARIO IS NULL THEN
+          BEGIN
+            -- recupera a última ocorrência de beneficios de concessões
+            -- conforme chave primária
+            vCODIGO_PESSOA_BENEFICIARIO := OBTER_CODIGO_PESSOA_BENEFIC(REGISTRO_BENEFICIARIO.CODIGO_EMPRESA,
+                                       vTIPO_CONTRATO,
+                                       REGISTRO_BENEFICIARIO.CODIGO_CONTRATO
+                                       );
+
+            --dbms_output.put_line('TESTE 5 - ' || 'CPF : ' || REGISTRO_BENEFICIARIO.CPF || 'PESSOA_TITULAR: ' || vCODIGO_PESSOA_TITULAR || 'PESSOA DEPENDENTE:' || vCODIGO_PESSOA || ' NOVO CODIGO: ' || vCODIGO_PESSOA_BENEFICIARIO);
+            vDATA_ATUALIZACAO := sysdate;
+
+            insert into RHPESS_PESSOA (CODIGO_EMPRESA,
+                                       CODIGO,
+                                       NOME,
+                                       NOME_ACESSO,
+                                       CPF,
+                                       IDENTIDADE,
+                                       DATA_NASCIMENTO,
+                                       SEXO,
+                                       ESTADO_CIVIL,
+                                       C_LIVRE_DESCR12,
+                                       LOGIN_USUARIO,
+                                       DT_ULT_ALTER_USUA)
+                               values (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA,
+                                       vCODIGO_PESSOA_BENEFICIARIO,
+                                       REGISTRO_BENEFICIARIO.NOME,
+                                       REGISTRO_BENEFICIARIO.NOME,
+                                       REGISTRO_BENEFICIARIO.CPF,
+                                       REGISTRO_BENEFICIARIO.IDENTIDADE,
+                                       REGISTRO_BENEFICIARIO.DATA_NASCIMENTO,
+                                       REGISTRO_BENEFICIARIO.CODIGO_SEXO,
+                                       REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL,
+                                       REGISTRO_BENEFICIARIO.NOME_DA_MAE,
+                                       vUSUARIO,
+                                       vDATA_ATUALIZACAO);
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'INCLUSÃO DE DADOS DE PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := null;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := null;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := null;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA, vUSUARIO_ATUALIZACAO, 'I', REG_APOIO_LOG_SIST);
+
+          EXCEPTION
+             WHEN DUP_VAL_ON_INDEX THEN
+                --raise_application_error (-20001,'TENTATIVA DE INSERCAO DE PESSOA JÁ REGISTRADA: ' || vCODIGO_PESSOA_BENEFICIARIO);
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TENTATIVA DE INSERCAO DE PESSOA JÁ REGISTRADA',vCODIGO_PESSOA_BENEFICIARIO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+             WHEN OTHERS THEN
+                raise_application_error (-20002,'ERRO AO TENTAR REGISTRAR PESSOA');
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR REGISTRAR PESSOA',vCODIGO_PESSOA_BENEFICIARIO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF || 'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+          END;
+
+        BEGIN
+        vDATA_ATUALIZACAO := sysdate;
+
+        insert into RHPESS_RL_PESS_PES (COD_EMPRESA,
+                                        COD_PESSOA,
+                                        TP_RELACIONAMENTO,
+                                        COD_PESSOA_RELAC,
+                                        LOGIN_USUARIO,
+                                        DT_ULT_ALTER_USUA,
+                                        OCORRENCIA,
+                                        DATA_INI_VIGENCIA)
+                                values (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA,
+                                        vCODIGO_PESSOA_TITULAR,
+                                        REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO,
+                                        vCODIGO_PESSOA_BENEFICIARIO,
+                                        vUSUARIO,
+                                        vDATA_ATUALIZACAO,
+                                        '1',
+                                        vDATA_ATUALIZACAO);
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'INCLUSÃO DE DADOS DE PESSOA PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA_BENEFICIARIO;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := 1;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA_PESSOA, vUSUARIO_ATUALIZACAO, 'I', REG_APOIO_LOG_SIST);
+
+          EXCEPTION
+             WHEN DUP_VAL_ON_INDEX THEN
+                --raise_application_error (-20001,'TENTATIVA DE INSERCAO DE RELACIONAMENTO PESSOA/PESSOA JÁ REGISTRADA');
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TENTATIVA DE INSERCAO DE RELACIONAMENTO PESSOA/PESSOA JÁ REGISTRADA', vCODIGO_PESSOA_BENEFICIARIO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+             WHEN OTHERS THEN
+                --raise_application_error (-20002,'ERRO AO TENTAR REGISTRAR RELACIONAMENTO PESSOA/PESSOA');
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR REGISTRAR RELACIONAMENTO PESSOA/PESSOA', vCODIGO_PESSOA_BENEFICIARIO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF || 'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+          END;
+
+/*
+       ELSIF vCODIGO_PESSOA_BENEFICIARIO IS NOT NULL THEN
+         BEGIN
+           IF (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA IS NOT NULL AND REGISTRO_BENEFICIARIO.CPF IS NOT NULL) THEN
+             vHOUVE_ALTERACAO_DADOS := FALSE;
+
+             IF (REGISTRO_BENEFICIARIO.NOME IS NOT NULL AND (( vPESSOA_NOME IS NOT NULL AND (REGISTRO_BENEFICIARIO.NOME <> vPESSOA_NOME) ) OR (vPESSOA_NOME IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - NOME', 'VALOR ANTERIOR: ' || vPESSOA_NOME || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.NOME);
+                vPESSOA_NOME := REGISTRO_BENEFICIARIO.NOME;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.IDENTIDADE IS NOT NULL AND (( vPESSOA_IDENTIDADE IS NOT NULL AND (REGISTRO_BENEFICIARIO.IDENTIDADE <> vPESSOA_IDENTIDADE) ) OR (vPESSOA_IDENTIDADE IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - IDENTIDADE', 'VALOR ANTERIOR: ' || vPESSOA_IDENTIDADE || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.IDENTIDADE);
+                vPESSOA_IDENTIDADE := REGISTRO_BENEFICIARIO.IDENTIDADE;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.DATA_NASCIMENTO IS NOT NULL AND (( vPESSOA_DATA_NASCIMENTO IS NOT NULL AND (REGISTRO_BENEFICIARIO.DATA_NASCIMENTO <> vPESSOA_DATA_NASCIMENTO) ) OR (vPESSOA_DATA_NASCIMENTO IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - DATA NASCIMENTO', 'VALOR ANTERIOR: ' || vPESSOA_DATA_NASCIMENTO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.DATA_NASCIMENTO);
+                vPESSOA_DATA_NASCIMENTO := REGISTRO_BENEFICIARIO.DATA_NASCIMENTO;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.CODIGO_SEXO IS NOT NULL AND (( vPESSOA_SEXO IS NOT NULL AND (REGISTRO_BENEFICIARIO.CODIGO_SEXO <> vPESSOA_SEXO) ) OR (vPESSOA_SEXO IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - SEXO', 'VALOR ANTERIOR: ' || vPESSOA_SEXO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_SEXO);
+                vPESSOA_SEXO := REGISTRO_BENEFICIARIO.CODIGO_SEXO;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL IS NOT NULL AND (( vPESSOA_ESTADO_CIVIL IS NOT NULL AND (REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL <> vPESSOA_ESTADO_CIVIL) ) OR (vPESSOA_ESTADO_CIVIL IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - ESTADO CIVIL', 'VALOR ANTERIOR: ' || vPESSOA_ESTADO_CIVIL || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL);
+                vPESSOA_ESTADO_CIVIL := REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.NOME_DA_MAE IS NOT NULL AND (( vPESSOA_NOME_DA_MAE IS NOT NULL AND (REGISTRO_BENEFICIARIO.NOME_DA_MAE <> vPESSOA_NOME_DA_MAE) ) OR (vPESSOA_NOME_DA_MAE IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - NOME DA MÃE', 'VALOR ANTERIOR: ' || vPESSOA_NOME_DA_MAE || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.NOME_DA_MAE);
+                vPESSOA_NOME_DA_MAE := REGISTRO_BENEFICIARIO.NOME_DA_MAE;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             vDATA_ATUALIZACAO := sysdate;
+
+             IF vHOUVE_ALTERACAO_DADOS THEN
+             GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA', REGISTRO_BENEFICIARIO.CODIGO_EMPRESA || REGISTRO_BENEFICIARIO.CPF || vCODIGO_PESSOA_BENEFICIARIO);
+
+             update RHPESS_PESSOA set NOME = vPESSOA_NOME,
+                                      DATA_NASCIMENTO = vPESSOA_DATA_NASCIMENTO,
+                                      SEXO = vPESSOA_SEXO,
+                                      ESTADO_CIVIL = vPESSOA_ESTADO_CIVIL,
+                                      IDENTIDADE = vPESSOA_IDENTIDADE,
+                                      C_LIVRE_DESCR12 = vPESSOA_NOME_DA_MAE,
+                                      LOGIN_USUARIO = vUSUARIO_ATUALIZACAO,
+                                      DT_ULT_ALTER_USUA = vDATA_ATUALIZACAO
+                    where CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                      and CPF = REGISTRO_BENEFICIARIO.CPF;
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := null;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := null;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := null;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA, vUSUARIO_ATUALIZACAO, 'A', REG_APOIO_LOG_SIST);
+               END IF;
+           END IF;
+
+         EXCEPTION
+             WHEN OTHERS THEN
+                raise_application_error (-20002,'ERRO AO TENTAR ATUALIZAR REGISTRO DE PESSOA');
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR ATUALIZAR REGISTRO DE PESSOA', null);
+          END;
+
+         IF vTIPO_RELACIONAMENTO IS NULL THEN
+            -- Se não há relacionamento entre o titular e o respectivo beneficiário
+            -- então registra-se o relacionamento
+            vDATA_ATUALIZACAO := sysdate;
+            BEGIN
+            insert into RHPESS_RL_PESS_PES (COD_EMPRESA,
+                                            COD_PESSOA,
+                                            TP_RELACIONAMENTO,
+                                            COD_PESSOA_RELAC,
+                                            LOGIN_USUARIO,
+                                            DT_ULT_ALTER_USUA,
+                                            OCORRENCIA,
+                                            DATA_INI_VIGENCIA)
+                                    values (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA,
+                                            vCODIGO_PESSOA_TITULAR,
+                                            REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO,
+                                            vCODIGO_PESSOA_BENEFICIARIO,
+                                            vUSUARIO,
+                                            vDATA_ATUALIZACAO,
+                                            '1',
+                                            vDATA_ATUALIZACAO);
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'INCLUSÃO DE DADOS DE PESSOA PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA_BENEFICIARIO;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := 1;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA_PESSOA, vUSUARIO_ATUALIZACAO, 'I', REG_APOIO_LOG_SIST);
+            EXCEPTION
+            WHEN OTHERS THEN
+                 --raise_application_error (-20014,'ERRO AO TENTAR INCLUIR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR : ' || ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                 GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR INCLUIR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR', ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+            END;
+         ELSE
+             IF vTIPO_RELACIONAMENTO <> REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO THEN
+                --vTIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                vDATA_ATUALIZACAO := sysdate;
+                BEGIN
+
+                    GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA PESSOA', null);
+
+                    IF REGISTRO_BENEFICIARIO.NOME IS NOT NULL AND REGISTRO_BENEFICIARIO.NOME <> vPESSOA_NOME THEN
+                       GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - TP_RELACIONAMENTO', 'VALOR ANTERIOR: ' || vTIPO_RELACIONAMENTO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO);
+                    END IF;
+
+                update RHPESS_RL_PESS_PES
+                   set TP_RELACIONAMENTO = REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO,
+                       LOGIN_USUARIO = vUSUARIO_ATUALIZACAO,
+                       DT_ULT_ALTER_USUA = vDATA_ATUALIZACAO
+                where COD_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                  and COD_PESSOA = vCODIGO_PESSOA_TITULAR
+                  and COD_PESSOA_RELAC = vCODIGO_PESSOA_BENEFICIARIO
+                  and TP_RELACIONAMENTO = vTIPO_RELACIONAMENTO;
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA_BENEFICIARIO;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := 1;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA_PESSOA, vUSUARIO_ATUALIZACAO, 'A', REG_APOIO_LOG_SIST);
+
+                EXCEPTION
+                WHEN OTHERS THEN
+                     --raise_application_error (-20014,'ERRO AO TENTAR ATUALIZAR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR : ' || ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                     GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR ATUALIZAR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR', ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                END;
+             END IF;
+         END IF;
+*/
+       END IF;
+
+    ELSIF ((REGISTRO_BENEFICIARIO.TIPO_OPERACAO = 'A') OR
+           ((REGISTRO_BENEFICIARIO.TIPO_OPERACAO = 'I') and vCODIGO_PESSOA_BENEFICIARIO IS NOT NULL) ) THEN
+
+       IF vCODIGO_PESSOA_BENEFICIARIO IS NULL THEN
+          GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO DE OPERAÇÂO ALTERAÇÃO - PESSOA INEXISTENTE',null);
+       END IF;
+
+       IF vCODIGO_PESSOA_BENEFICIARIO IS NOT NULL THEN
+         BEGIN
+           IF (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA IS NOT NULL AND REGISTRO_BENEFICIARIO.CPF IS NOT NULL) THEN
+             vHOUVE_ALTERACAO_DADOS := FALSE;
+
+             IF (REGISTRO_BENEFICIARIO.NOME IS NOT NULL AND (( vPESSOA_NOME IS NOT NULL AND (REGISTRO_BENEFICIARIO.NOME <> vPESSOA_NOME) ) OR (vPESSOA_NOME IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - NOME', 'VALOR ANTERIOR: ' || vPESSOA_NOME || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.NOME);
+                vPESSOA_NOME := REGISTRO_BENEFICIARIO.NOME;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.IDENTIDADE IS NOT NULL AND (( vPESSOA_IDENTIDADE IS NOT NULL AND (REGISTRO_BENEFICIARIO.IDENTIDADE <> vPESSOA_IDENTIDADE) ) OR (vPESSOA_IDENTIDADE IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - IDENTIDADE', 'VALOR ANTERIOR: ' || vPESSOA_IDENTIDADE || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.IDENTIDADE);
+                vPESSOA_IDENTIDADE := REGISTRO_BENEFICIARIO.IDENTIDADE;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.DATA_NASCIMENTO IS NOT NULL AND (( vPESSOA_DATA_NASCIMENTO IS NOT NULL AND (REGISTRO_BENEFICIARIO.DATA_NASCIMENTO <> vPESSOA_DATA_NASCIMENTO) ) OR (vPESSOA_DATA_NASCIMENTO IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - DATA NASCIMENTO', 'VALOR ANTERIOR: ' || vPESSOA_DATA_NASCIMENTO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.DATA_NASCIMENTO);
+                vPESSOA_DATA_NASCIMENTO := REGISTRO_BENEFICIARIO.DATA_NASCIMENTO;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.CODIGO_SEXO IS NOT NULL AND (( vPESSOA_SEXO IS NOT NULL AND (REGISTRO_BENEFICIARIO.CODIGO_SEXO <> vPESSOA_SEXO) ) OR (vPESSOA_SEXO IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - SEXO', 'VALOR ANTERIOR: ' || vPESSOA_SEXO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_SEXO);
+                vPESSOA_SEXO := REGISTRO_BENEFICIARIO.CODIGO_SEXO;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL IS NOT NULL AND (( vPESSOA_ESTADO_CIVIL IS NOT NULL AND (REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL <> vPESSOA_ESTADO_CIVIL) ) OR (vPESSOA_ESTADO_CIVIL IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - ESTADO CIVIL', 'VALOR ANTERIOR: ' || vPESSOA_ESTADO_CIVIL || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL);
+                vPESSOA_ESTADO_CIVIL := REGISTRO_BENEFICIARIO.CODIGO_ESTADO_CIVIL;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             IF (REGISTRO_BENEFICIARIO.NOME_DA_MAE IS NOT NULL AND (( vPESSOA_NOME_DA_MAE IS NOT NULL AND (REGISTRO_BENEFICIARIO.NOME_DA_MAE <> vPESSOA_NOME_DA_MAE) ) OR (vPESSOA_NOME_DA_MAE IS NULL))) THEN
+                GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - NOME DA MÃE', 'VALOR ANTERIOR: ' || vPESSOA_NOME_DA_MAE || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.NOME_DA_MAE);
+                vPESSOA_NOME_DA_MAE := REGISTRO_BENEFICIARIO.NOME_DA_MAE;
+                vHOUVE_ALTERACAO_DADOS := TRUE;
+             END IF;
+
+             vDATA_ATUALIZACAO := sysdate;
+
+             IF vHOUVE_ALTERACAO_DADOS THEN
+             GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA', REGISTRO_BENEFICIARIO.CODIGO_EMPRESA || REGISTRO_BENEFICIARIO.CPF || vCODIGO_PESSOA_BENEFICIARIO);
+
+             update RHPESS_PESSOA set NOME = vPESSOA_NOME,
+                                      DATA_NASCIMENTO = vPESSOA_DATA_NASCIMENTO,
+                                      SEXO = vPESSOA_SEXO,
+                                      ESTADO_CIVIL = vPESSOA_ESTADO_CIVIL,
+                                      IDENTIDADE = vPESSOA_IDENTIDADE,
+                                      C_LIVRE_DESCR12 = vPESSOA_NOME_DA_MAE,
+                                      LOGIN_USUARIO = vUSUARIO_ATUALIZACAO,
+                                      DT_ULT_ALTER_USUA = vDATA_ATUALIZACAO
+                    where CODIGO_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                      and CPF = REGISTRO_BENEFICIARIO.CPF
+                      AND DT_TERMINO IS NULL;
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := null;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := null;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := null;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA, vUSUARIO_ATUALIZACAO, 'A', REG_APOIO_LOG_SIST);
+               END IF;
+           END IF;
+
+         EXCEPTION
+             WHEN OTHERS THEN
+                GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR ATUALIZAR REGISTRO DE PESSOA', null);
+                raise_application_error (-20002,'ERRO AO TENTAR ATUALIZAR REGISTRO DE PESSOA');
+          END;
+
+         IF vTIPO_RELACIONAMENTO IS NULL THEN
+            -- Se não há relacionamento entre o titular e o respectivo beneficiário
+            -- então registra-se o relacionamento
+            vDATA_ATUALIZACAO := sysdate;
+            BEGIN
+            insert into RHPESS_RL_PESS_PES (COD_EMPRESA,
+                                            COD_PESSOA,
+                                            TP_RELACIONAMENTO,
+                                            COD_PESSOA_RELAC,
+                                            LOGIN_USUARIO,
+                                            DT_ULT_ALTER_USUA,
+                                            OCORRENCIA,
+                                            DATA_INI_VIGENCIA)
+                                    values (REGISTRO_BENEFICIARIO.CODIGO_EMPRESA,
+                                            vCODIGO_PESSOA_TITULAR,
+                                            REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO,
+                                            vCODIGO_PESSOA_BENEFICIARIO,
+                                            vUSUARIO,
+                                            vDATA_ATUALIZACAO,
+                                            '1',
+                                            vDATA_ATUALIZACAO);
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'INCLUSÃO DE DADOS DE PESSOA PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA_BENEFICIARIO;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := 1;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA_PESSOA, vUSUARIO_ATUALIZACAO, 'I', REG_APOIO_LOG_SIST);
+            EXCEPTION
+            WHEN OTHERS THEN
+                 --raise_application_error (-20014,'ERRO AO TENTAR INCLUIR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR : ' || ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                 GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR INCLUIR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR', ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+            END;
+         ELSE
+             IF vTIPO_RELACIONAMENTO <> REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO THEN
+                --vTIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                vDATA_ATUALIZACAO := sysdate;
+                BEGIN
+
+                    GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA PESSOA', null);
+
+                    IF REGISTRO_BENEFICIARIO.NOME IS NOT NULL AND REGISTRO_BENEFICIARIO.NOME <> vPESSOA_NOME THEN
+                       GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA - TP_RELACIONAMENTO', 'VALOR ANTERIOR: ' || vTIPO_RELACIONAMENTO || ' VALOR_ATUAL: ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO);
+                    END IF;
+
+                update RHPESS_RL_PESS_PES
+                   set TP_RELACIONAMENTO = REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO,
+                       LOGIN_USUARIO = vUSUARIO_ATUALIZACAO,
+                       DT_ULT_ALTER_USUA = vDATA_ATUALIZACAO
+                where COD_EMPRESA = REGISTRO_BENEFICIARIO.CODIGO_EMPRESA
+                  and COD_PESSOA = vCODIGO_PESSOA_TITULAR
+                  and COD_PESSOA_RELAC = vCODIGO_PESSOA_BENEFICIARIO
+                  and TP_RELACIONAMENTO = vTIPO_RELACIONAMENTO;
+
+                  GRAVA_LOG(TIPO_LOG_INFO, Numero_linha, 'ATUALIZAÇÃO DE DADOS DE PESSOA PESSOA', vCODIGO_PESSOA_BENEFICIARIO);
+
+                  -- Grava log do sistema
+                  REG_APOIO_LOG_SIST.CODIGO_EMPRESA := REGISTRO_BENEFICIARIO.CODIGO_EMPRESA;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_TITULAR := vCODIGO_PESSOA_TITULAR;
+                  REG_APOIO_LOG_SIST.TIPO_RELACIONAMENTO := REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO;
+                  REG_APOIO_LOG_SIST.CODIGO_PESSOA_BENEFICIARIO := vCODIGO_PESSOA_BENEFICIARIO;
+                  REG_APOIO_LOG_SIST.OCORRENCIA := 1;
+                  GRAVA_LOG_SISTEMA(vDATA_ATUALIZACAO, OBJETO_PESSOA_PESSOA, vUSUARIO_ATUALIZACAO, 'A', REG_APOIO_LOG_SIST);
+
+                EXCEPTION
+                WHEN OTHERS THEN
+                     --raise_application_error (-20014,'ERRO AO TENTAR ATUALIZAR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR : ' || ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                     GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ERRO AO TENTAR ATUALIZAR RELACIONAMENTO ENTRE PESSOA DEPENDENTE COM O TITULAR', ' PESSOA TITULAR: ' || vCODIGO_PESSOA_TITULAR || ' PESSOA BENEFICIARIO: ' || vCODIGO_PESSOA_BENEFICIARIO|| ' RELACIONAMENTO ' || REGISTRO_BENEFICIARIO.CODIGO_TIPO_RELACIONAMENTO || 'CPF: ' || REGISTRO_BENEFICIARIO.CPF);
+                END;
+             END IF;
+         END IF;
+
+       END IF;
+
+
+    ELSE
+         GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'TIPO DE OPERAÇÃO INVALIDO',null);
+         raise_application_error (-20001,'TIPO DE OPERAÇÃO INVALIDO');
+    END IF;
+
+    EXCEPTION
+    WHEN OTHERS THEN
+         --dbms_output.put_line('ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM);
+         --GRAVA_LOG(TIPO_LOG_ERRO, Numero_linha, 'ENCONTRADO ERRO - '||SQLCODE||' -ERROR- '||SQLERRM, null);
+
+         vRETORNO.CODIGO_RETORNO := 99;
+         vRETORNO.DESCRICAO_RETORNO := 'PROCESSAMENTO COM ERRO';
+         vRETORNO.LISTA_LOG_RETORNO := vLISTA_LOG;
+    END;
+
+        vRETORNO.CODIGO_RETORNO := 0;
+        vRETORNO.DESCRICAO_RETORNO := 'PROCESSAMENTO OK';
+        vRETORNO.LISTA_LOG_RETORNO := vLISTA_LOG;
+
+    IF INDICADOR_TESTE THEN
+      ROLLBACK;
+    END IF;
+
+    RETURN vRETORNO;
+end;

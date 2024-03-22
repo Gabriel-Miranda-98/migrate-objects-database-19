@@ -1,0 +1,96 @@
+
+  CREATE OR REPLACE EDITIONABLE FUNCTION "ARTERH"."F_VERIFICA_LACOM" ( P_CODIGO_EMPRESA CHAR, P_CODIGO_PESSOA VARCHAR2, P_DT_REG_OCORRENCIA DATE, P_OCORRENCIA CHAR,P_DATA_INI_AFAST DATE, P_DATA_FIM_AFAST DATE)
+RETURN NUMBER AS 
+
+EXISTE NUMBER;
+data_inicial date;
+data_final date;
+num_dias number;
+
+BEGIN
+dbms_output.enable(null);
+
+num_dias :=0;
+data_final:=null;
+data_inicial:=null;
+
+select COUNT(1) INTO EXISTE
+from RHMEDI_FICHA_MED
+LEFT  JOIN RHMEDI_RL_FICH_PRO
+ON
+RHMEDI_FICHA_MED.CODIGO_EMPRESA = RHMEDI_RL_FICH_PRO.CODIGO_EMPRESA AND
+RHMEDI_FICHA_MED.CODIGO_PESSOA = RHMEDI_RL_FICH_PRO.CODIGO_PESSOA AND
+RHMEDI_FICHA_MED.DT_REG_OCORRENCIA = RHMEDI_RL_FICH_PRO.DT_REG_OCORRENCIA AND
+RHMEDI_FICHA_MED.OCORRENCIA = RHMEDI_RL_FICH_PRO.OCORRENCIA
+where 
+RHMEDI_FICHA_MED.natureza_exame = '0107'
+AND RHMEDI_RL_FICH_PRO.codigo_proc_med in ('000000000000003','000000000000001')
+and RHMEDI_FICHA_MED.codigo_pessoa = P_CODIGO_PESSOA
+and RHMEDI_FICHA_MED.CODIGO_EMPRESA = P_CODIGO_EMPRESA
+;
+  dbms_output.put_line(EXISTE);
+
+
+IF (EXISTE>1) THEN
+--dbms_output.put_line('CODIGO_EMPRESA ; TIPO_CONTRATO; CODIGO_CONTRATO; DATA; CODIGO_SITUACAO; REF_HORAS; LOGIN_USUARIO; DT_ULT_ALTER_USUA; TIPO_APURACAO ');
+FOR C1 IN (
+select  rownum nmr_linha,x.* from (
+select RHMEDI_FICHA_MED.codigo_pessoa, RHMEDI_FICHA_MED.DATA_INI_AFAST, RHMEDI_FICHA_MED.DATA_FIM_AFAST, DATA_FIM_AFAST-DATA_INI_AFAST+1 nmr_dias 
+from RHMEDI_FICHA_MED
+LEFT  JOIN RHMEDI_RL_FICH_PRO
+ON
+RHMEDI_FICHA_MED.CODIGO_EMPRESA = RHMEDI_RL_FICH_PRO.CODIGO_EMPRESA AND
+RHMEDI_FICHA_MED.CODIGO_PESSOA = RHMEDI_RL_FICH_PRO.CODIGO_PESSOA AND
+RHMEDI_FICHA_MED.DT_REG_OCORRENCIA = RHMEDI_RL_FICH_PRO.DT_REG_OCORRENCIA AND
+RHMEDI_FICHA_MED.OCORRENCIA = RHMEDI_RL_FICH_PRO.OCORRENCIA
+where 
+RHMEDI_FICHA_MED.natureza_exame = '0107'
+AND RHMEDI_RL_FICH_PRO.codigo_proc_med in ('000000000000003','000000000000001')
+and RHMEDI_FICHA_MED.codigo_pessoa = P_CODIGO_PESSOA
+and RHMEDI_FICHA_MED.CODIGO_EMPRESA = P_CODIGO_EMPRESA
+
+AND ( RHMEDI_FICHA_MED.DT_REG_OCORRENCIA <> TO_DATE(P_DT_REG_OCORRENCIA ,'DD/MM/RRRR') 
+OR RHMEDI_FICHA_MED.OCORRENCIA <> P_OCORRENCIA )
+
+union all
+select P_CODIGO_PESSOA , P_DATA_INI_AFAST , P_DATA_FIM_AFAST, P_DATA_FIM_AFAST- P_DATA_INI_AFAST +1 from dual
+order by 2
+
+) x
+)
+
+LOOP
+--dbms_output.put_line('--'||vCONTADOR||'-'||C1.CODIGO_CONTRATO||'-'||C1.DATA_INICIO||'-'||C1.DATA_FIM);
+if (data_final>=data_inicial)then
+  dbms_output.put_line(data_inicial);
+  dbms_output.put_line(num_dias);
+end if;
+
+
+if ( c1.nmr_linha = 1 ) then
+  data_inicial := to_date(c1.DATA_INI_AFAST,'DD/MM/RRRR');
+  data_final := to_date(ADD_MONTHS(c1.DATA_INI_AFAST,24),'DD/MM/RRRR');
+end if;
+
+  if ( c1.DATA_INI_AFAST <= data_final ) then
+    num_dias := num_dias + c1.nmr_dias; 
+  else  
+    data_inicial := to_date(c1.DATA_INI_AFAST,'DD/MM/RRRR');
+    data_final := to_date(ADD_MONTHS(c1.DATA_INI_AFAST,24),'DD/MM/RRRR');
+    num_dias := c1.nmr_dias;
+
+  end if;
+
+end loop;
+  IF (num_dias > 30) THEN
+    dbms_output.put_line('ERRO'||num_dias);
+   RETURN 0;
+  ELSE
+    dbms_output.put_line('CERTO'||num_dias);
+    RETURN 1;
+  END IF;
+ELSE
+  dbms_output.put_line('CERTO 2'||num_dias);
+  RETURN 1;
+END IF;
+end;

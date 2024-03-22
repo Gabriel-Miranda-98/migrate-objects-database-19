@@ -1,0 +1,41 @@
+
+  CREATE OR REPLACE FORCE EDITIONABLE VIEW "ARTERH"."VIEW_SIF_DADOS_FERIAS" ("CODIGO_EMPRESA", "TIPO_CONTRATO", "CODIGO_CONTRATO", "CPF", "PERIODO", "DATA_INICIO", "DATA_FIM", "DATA_RETORNO_TRABALHO", "STATUS_CONFIRMACAO", "STATUS") AS 
+  SELECT
+    f.codigo_empresa,
+    f.tipo_contrato,
+    f.codigo_contrato,
+    TRIM(P.CPF) AS CPF,
+    f.periodo,
+    f.dt_ini_gozo                                             AS data_inicio,
+    f.dt_fim_gozo                                             AS data_fim,
+    f.dt_retorno                                              AS data_retorno_trabalho,
+    f.status_confirmacao,
+    decode(f.status_confirmacao, '1', 'CONFIRMADA', '2', 'A CONFIRMA',
+           '3', 'CONTADAS EM DOBRO', '4', 'VENDIDA-INDENIZADA', '5',
+           'INTERROMPIDA', '6', 'ALTERADA APOS CONFIRMACAO', '7', 'CONFIRMADA APOS PRAZO LEGAL',
+           '8', 'CANCELADA-INDEFERIDA', '0', 'Nenhum', 'A',
+           'NAO SOLICITADA-NAO CONFIRMADA', 'B', 'CONFIRMADO INDEFERIMENTO-CANCELAMENTO', 'C', 'AUTORIZDA A CONFIRMACAO',
+           'D', 'AUTORIZADA A INTERRUPCAO', 'E', 'A SER UTILIZADA-TRANSICAO', 'F',
+           'PAGAMENTO VIA JUDICIAL', 'G', 'SOLICITADA A INTERRUPCAO', 'I', 'PARA ANALISE DO PAGAMENTO',
+           'J', 'CUMPRIMENTO JUDICIAL', 'K', 'PERDIDAS POR FALTAS', 'L',
+           'DESISTENCIA DO PAGAMENTO', 'M', 'PAGAMENTO INDEFERIDO', 'P', 'PAGAMENTO VIA PRECATORIO',
+           'Q', 'CANCELADA POR AFASTAMENTO', 'R', 'SOLICITADO O CANCELAMENTO', 'T',
+           'APROVADO O CANCELAMENTO', NULL, ' SEM STATUS ') AS status
+FROM
+    arterh.rhferi_ferias F
+    INNER JOIN ARTERH.RHPESS_CONTRATO C
+    ON C.CODIGO_EMPRESA=F.CODIGO_EMPRESA
+    AND C.TIPO_CONTRATO=F.TIPO_CONTRATO
+    AND C.CODIGO=F.CODIGO_CONTRATO
+    INNER JOIN ARTERH.RHPESS_PESSOA P
+    ON P.CODIGO=C.CODIGO_PESSOA 
+    AND P.CODIGO_EMPRESA=C.CODIGO_EMPRESA
+WHERE
+    f.codigo_empresa IN ( '0001', '0003 ', '0005 ', '0007 ', '0013',
+                                      '0014' )
+    AND f.dt_ini_gozo IS NOT NULL
+    AND TO_CHAR(f.DT_INI_GOZO,'YYYY')>='2013'
+    AND C.ANO_MES_REFERENCIA=(SELECT MAX(AUX.ANO_MES_REFERENCIA) FROM ARTERH.RHPESS_CONTRATO AUX 
+    WHERE AUX.CODIGO=C.CODIGO
+    AND AUX.TIPO_CONTRATO=C.TIPO_CONTRATO
+    AND AUX.CODIGO_EMPRESA=C.CODIGO_EMPRESA)

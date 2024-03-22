@@ -1,0 +1,56 @@
+
+  CREATE OR REPLACE EDITIONABLE TRIGGER "ARTERH"."TR_ASSESSORIA_SANEAMENTO" FOR UPDATE OR INSERT OF NUMERO_LINHA, STATUS_LINHA ON ARTERH.rhpbh_apoio_assessoria COMPOUND TRIGGER
+
+TYPE REG_DADOS IS RECORD ( 
+vcodigo_empresa rhpbh_apoio_assessoria.Codigo_empresa%TYPE,
+vTipo_contrato rhpbh_apoio_assessoria.Tipo_contrato%TYPE,
+vCodigo_contrato rhpbh_apoio_assessoria.Codigo_contrato%TYPE,
+vdata_carga rhpbh_apoio_assessoria.data_carga%TYPE,
+vLINHA rhpbh_apoio_assessoria.numero_linha%TYPE);
+
+TYPE LINHA
+IS 
+  TABLE OF REG_DADOS INDEX BY PLS_INTEGER;
+  LINHA_info LINHA;
+
+
+
+   AFTER EACH ROW
+IS
+BEGIN
+  LINHA_info(LINHA_info.COUNT + 1).vCODIGO_EMPRESA     := :NEW.CODIGO_EMPRESA;
+    LINHA_info(LINHA_info.COUNT ).vCODIGO_CONTRATO        := :NEW.CODIGO_CONTRATO;
+  LINHA_info(LINHA_info.COUNT ).vTIPO_CONTRATO          := :NEW.TIPO_CONTRATO;
+  LINHA_info(LINHA_info.COUNT ).vdata_carga := SYSDATE;
+  LINHA_info(LINHA_info.COUNT ).vLINHA := :NEW.numero_linha;
+END AFTER EACH ROW;
+
+
+AFTER STATEMENT
+IS
+BEGIN
+
+  FOR indx IN 1 .. LINHA_info.COUNT
+  LOOP
+
+ UPDATE ARTERH.rhpbh_apoio_assessoria
+    SET MAX_LINHA  =(SELECT DECODE(MAX(MAX_LINHA)+1,NULL,1,MAX(MAX_LINHA)+1)
+FROM ARTERH.rhpbh_apoio_assessoria  
+WHERE CODIGO_CONTRATO=LINHA_info(indx).vCODIGO_CONTRATO 
+ AND TIPO_CONTRATO=LINHA_info(indx).vTIPO_CONTRATO 
+ AND CODIGO_EMPRESA=LINHA_info(indx).vCODIGO_EMPRESA 
+ AND trunc(data_carga)=trunc(LINHA_info(indx).vdata_carga))
+   WHERE CODIGO_CONTRATO=LINHA_info(indx).vCODIGO_CONTRATO 
+ AND TIPO_CONTRATO=LINHA_info(indx).vTIPO_CONTRATO 
+ AND CODIGO_EMPRESA=LINHA_info(indx).vCODIGO_EMPRESA 
+ and STATUS_LINHA='CARREGADO' 
+ AND NUMERO_LINHA=LINHA_info(indx).vLINHA;
+
+  END LOOP;
+
+END AFTER STATEMENT;
+END;
+
+
+
+ALTER TRIGGER "ARTERH"."TR_ASSESSORIA_SANEAMENTO" ENABLE

@@ -1,0 +1,25 @@
+
+  CREATE OR REPLACE EDITIONABLE FUNCTION "ARTERH"."FN_TESTE_CAMPOS" (p_NOME_TABELA VARCHAR2, P_OWNER VARCHAR2, P_COLUNA_SUB VARCHAR2, P_NOVO_VALOR_COLUNA VARCHAR2) RETURN CLOB AS 
+LISTA_CAMPOS CLOB;
+BEGIN
+
+
+Select 
+       REPLACE(RTRIM(
+         XMLAGG(
+           XMLELEMENT(
+             E,
+             CASE WHEN column_name=P_COLUNA_SUB THEN CASE WHEN P_COLUNA_SUB='ANO_MES_REFERENCIA' THEN 'TO_CHAR(TO_DATE('''||P_NOVO_VALOR_COLUNA||''',''DD/MM/YYYY'')) AS ANO_MES_REFERENCIA'END  ELSE column_name END,
+             ','
+           ).EXTRACT('//text()')
+        order by COLUMN_ID
+         ).GetClobVal(),
+         ','
+       ),'&apos;',chr(39)) AS CAMPOS
+       INTO LISTA_CAMPOS
+from  all_tab_cols
+WHERE  table_name=p_NOME_TABELA AND owner=P_OWNER;
+
+
+RETURN LISTA_CAMPOS;
+END;
