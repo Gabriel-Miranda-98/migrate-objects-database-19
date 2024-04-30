@@ -200,7 +200,7 @@ AND F.DT_ULT_ALTER_USUA<TO_DATE(SYSDATE,'DD/MM/YYYY')
 											AND --novo em 21/11/22
 											 tg.new_dt_ini_gozo IS NOT NULL
 											AND tg.new_dt_fim_gozo IS NOT NULL
-											AND tg.new_status_confirmacao IN ( '1', '5', 'D', 'G' ) 
+											AND tg.new_status_confirmacao IN ( '1', '5', 'D', 'G' )   --alterado em 20/03/24 - adicionado status G
 /*Gabriel aqui regra para olhar registros do dia*/
 --AND trunc(TG.DT_ULT_ALTER_USUA) BETWEEN vDATA_INICIO AND vDATA_FIM
 

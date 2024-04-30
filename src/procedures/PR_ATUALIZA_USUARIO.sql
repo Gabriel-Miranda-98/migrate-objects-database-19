@@ -81,7 +81,7 @@ BEGIN
                             AND NOT EXISTS (SELECT RHINTE_ED_IT_CONV.DADO_ORIGEM FROM RHINTE_ED_IT_CONV WHERE RHINTE_ED_IT_CONV.CODIGO_CONVERSAO = 'US03' 
                                                                                                             AND INSTR(ARTERH.RHUSER_P_SIST.CODIGO_USUARIO,RHINTE_ED_IT_CONV.DADO_ORIGEM,-1) > 4)
                           /*AND ( SUBSTR(ARTERH.RHUSER_P_SIST.CODIGO_USUARIO, 9, 3) NOT IN ( 'APB' ) OR ( SUBSTR(ARTERH.RHUSER_P_SIST.CODIGO_USUARIO, 9, 3) IS NULL ) )*/
-                                                   
+
                     )---- FIM DO FOR C6
                      LOOP
                         VCONT := VCONT + 1;
@@ -1090,7 +1090,7 @@ BEGIN
                             DT_ULT_ALTER_USUA = SYSDATE,
                             DATA_SISTEMA = TO_DATE(SYSDATE,'DD/MM/YYYY'),
                             ANO_BASE = TO_DATE('01/01/'||TO_CHAR(SYSDATE,'YYYY'),'DD/MM/YYYY')
-                            
+
                         WHERE
                                 CONTRATO_USUARIO = '' || C1.CODIGO_CONTRATO || ''
                             AND EMPRESA_USUARIO = '' || C1.CODIGO_EMPRESA || ''
@@ -1100,7 +1100,7 @@ BEGIN
                                                                     INSTR(ARTERH.RHUSER_P_SIST.CODIGO_USUARIO,RHINTE_ED_IT_CONV.DADO_ORIGEM,-1) > 4)
                             AND ARTERH.RHUSER_P_SIST.TIPO_LOGIN IN ('2','3') 
                             AND ARTERH.RHUSER_P_SIST.CODIGO_SERV_AUTENT IN ('PWS1'); COMMIT;
-                            
+
                             DELETE FROM ARTERH.RHUSER_RL_USR_GRP GRUPO WHERE GRUPO.CODIGO_USUARIO = '' || C2.CODIGO_USUARIO || '' 
                             AND GRUPO.CODIGO_GRUPO IN (SELECT REGEXP_SUBSTR(DADO_ORIGEM, '[^;]+',1, 2) AS GRUPO FROM RHINTE_ED_IT_CONV WHERE CODIGO_CONVERSAO = 'US01' AND DADO_DESTINO = 'EXCLUIR');
                             COMMIT;
@@ -1237,7 +1237,7 @@ BEGIN
                             AND ARTERH.RHUSER_P_SIST.TIPO_LOGIN IN ('2','3') 
                             AND ARTERH.RHUSER_P_SIST.CODIGO_SERV_AUTENT IN ('PWS1') ;
                             COMMIT;
-                            
+
                             DELETE FROM ARTERH.RHUSER_RL_USR_GRP GRUPO WHERE GRUPO.CODIGO_USUARIO = '' || C2.CODIGO_USUARIO || '' 
                             AND GRUPO.CODIGO_GRUPO IN (SELECT REGEXP_SUBSTR(DADO_ORIGEM, '[^;]+',1, 2) AS GRUPO FROM RHINTE_ED_IT_CONV WHERE CODIGO_CONVERSAO = 'US01' AND DADO_DESTINO = 'EXCLUIR');
                             COMMIT;

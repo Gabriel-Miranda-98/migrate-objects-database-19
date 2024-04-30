@@ -33,11 +33,9 @@ const extractAndSaveDDLs = async (connection, objectType, ownerInClause) => {
       await saveDDLToFile(objectTypePlural, row.OBJECT_NAME, row.DLL);
     }
   } catch (err) {
-    // Aqui você pode tratar o erro ORA-31603 especificamente, se necessário
     if (err.errorNum === 31603) {
       console.log(`Object not found, skipping... Error: ${err.message}`);
     } else {
-      // Para outros erros, você pode querer rethrow ou apenas logar
       console.error(`Error in extractAndSaveDDLs: ${err}`);
     }
   }
@@ -52,7 +50,7 @@ const run = async () => {
     });
 
     const owners = "'ARTERH', 'PONTO_ELETRONICO'";
-    const objectTypes = ['VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'SEQUENCE', 'TYPE'];
+    const objectTypes = ['VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'SEQUENCE', 'TYPE', 'PACKAGE', 'PACKAGE_BODY'];
 
     for (let objectType of objectTypes) {
       await extractAndSaveDDLs(connection, objectType, owners);
